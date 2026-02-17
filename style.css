@@ -8,23 +8,17 @@
   --btn2:#2a3447;
   --danger:#c04b4b;
   --accent:#3f7cff;
-  --ok:#2fbf7a;
+  --ok:#25c18a;
   --shadow: 0 10px 30px rgba(0,0,0,.35);
-
-  /* subject colors (subtle) */
-  --subj-math: rgba(63,124,255,.16);
-  --subj-jp:   rgba(255, 99,132,.14);
-  --subj-en:   rgba( 72,220,160,.13);
-  --subj-sci:  rgba(255,206, 86,.14);
-  --subj-soc:  rgba(153,102,255,.14);
-  --subj-oth:  rgba(201,203,207,.10);
 }
 
 *{box-sizing:border-box}
 body{
   margin:0;
   font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-  background: linear-gradient(180deg, #0b0c10, #0b0c10 40%, #07080b);
+  background: radial-gradient(1200px 600px at 10% 0%, rgba(63,124,255,0.16), transparent 60%),
+              radial-gradient(900px 700px at 90% 10%, rgba(255,120,120,0.10), transparent 65%),
+              linear-gradient(180deg, #0b0c10, #0b0c10 40%, #07080b);
   color:var(--text);
 }
 .hidden{display:none !important}
@@ -42,12 +36,12 @@ body{
   backdrop-filter: blur(10px);
   z-index:10;
 }
-.brand{font-weight:700}
+.brand{font-weight:800}
 .subtitle{color:var(--muted); font-size:12px; margin-top:2px}
 .topbar__nav{display:flex; gap:8px; flex-wrap:wrap}
 
 .container{max-width:1200px; margin:0 auto; padding:16px;}
-.view h2{margin:10px 0 14px}
+.view h2{margin:10px 0 10px}
 
 .card{
   background:var(--panel);
@@ -55,6 +49,16 @@ body{
   border-radius:14px;
   padding:14px;
   box-shadow: var(--shadow);
+}
+
+.note{
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .gridEdit{
@@ -68,21 +72,28 @@ body{
 
 .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
 .space{justify-content:space-between}
+.wrap{flex-wrap:wrap}
 
 .btn{
   padding:9px 12px;
-  border-radius:10px;
+  border-radius:12px;
   border:1px solid var(--line);
   background:var(--btn);
   color:var(--text);
   cursor:pointer;
-  user-select:none;
 }
 .btn:hover{background:var(--btn2)}
 .btn:disabled{opacity:.45; cursor:not-allowed}
-.btn.primary{background: var(--accent); border-color: rgba(255,255,255,.1)}
-.btn.danger{background: var(--danger); border-color: rgba(255,255,255,.1)}
-.btn.done{background: var(--ok); border-color: rgba(255,255,255,.12); font-weight:700}
+.btn.primary{background: rgba(63,124,255,0.25); border-color: rgba(63,124,255,0.6)}
+.btn.primary:hover{background: rgba(63,124,255,0.33)}
+.btn.danger{background: rgba(192,75,75,0.25); border-color: rgba(192,75,75,0.6)}
+.btn.danger:hover{background: rgba(192,75,75,0.33)}
+.btn.done{
+  background: rgba(37,193,138,0.22);
+  border-color: rgba(37,193,138,0.6);
+  font-weight: 800;
+}
+.btn.done:hover{background: rgba(37,193,138,0.30);}
 
 .list{display:grid; gap:10px; margin-top:10px}
 .item{
@@ -91,16 +102,16 @@ body{
   padding:12px;
   background: rgba(255,255,255,.02);
 }
-.itemTitle{font-weight:650}
+.itemTitle{font-weight:750}
 .muted{color:var(--muted)}
 .small{font-size:12px}
 .divider{height:1px; background:var(--line); margin:12px 0}
 
-.form{display:grid; gap:10px; max-width:560px}
+.form{display:grid; gap:10px; max-width:620px}
 label{display:grid; gap:6px; font-size:14px}
 input, select{
   padding:10px 12px;
-  border-radius:10px;
+  border-radius:12px;
   border:1px solid var(--line);
   background: rgba(255,255,255,.04);
   color:var(--text);
@@ -115,7 +126,7 @@ input, select{
   overflow:hidden;
   background:#05060a;
 }
-#stage, #reviewStage{
+#stage, #reviewStage, #pickerStage{
   width:100%;
   height:70vh;
   min-height:480px;
@@ -147,7 +158,7 @@ canvas{width:100%; height:100%; display:block; touch-action:none;}
 }
 .qbtn{
   padding:6px 8px;
-  border-radius:8px;
+  border-radius:10px;
   border:1px solid var(--line);
   background: rgba(255,255,255,.03);
   color: var(--text);
@@ -155,13 +166,12 @@ canvas{width:100%; height:100%; display:block; touch-action:none;}
 }
 .qbtn:hover{background: rgba(255,255,255,.07);}
 
-/* clickable edit hints */
 .clickEdit { cursor: pointer; }
 .clickEdit:hover { text-decoration: underline; }
 
 .hint{
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   opacity: .75;
   margin-left: 8px;
   white-space: nowrap;
@@ -170,126 +180,142 @@ canvas{width:100%; height:100%; display:block; touch-action:none;}
   .hint{ display:block; margin-left:0; margin-top:4px; }
 }
 
-/* Home note */
-.homeNote{ margin: 6px 0 12px; }
+/* HOMEトースト */
+.toast{
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 18px;
+  z-index: 9999;
+  background: rgba(15,20,30,0.92);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  max-width: min(92vw, 720px);
+}
 
-/* subject headers (colored, subtle) */
-.subjHeader{
+/* 教科ヘッダ（控えめ色） */
+.subjectHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  user-select:none;
+}
+.subjectHeader:hover{ background: rgba(255,255,255,0.06); }
+.subjectHeader .left{
+  display:flex; align-items:center; gap:10px;
+}
+.subjectHeader .bar{
+  width: 10px; height: 28px; border-radius: 999px;
+  background: rgba(255,255,255,0.2);
+}
+.subjectHeader .title{
+  font-weight: 800;
+}
+.subjectHeader .meta{
+  color: var(--muted);
+  font-size: 12px;
+}
+.subjectHeader .chev{
+  opacity: .8;
+  font-weight: 900;
+}
+
+.subj-math .bar{ background: rgba(63,124,255,0.9); }
+.subj-jpn  .bar{ background: rgba(186,85,211,0.9); }
+.subj-eng  .bar{ background: rgba(0,206,209,0.9); }
+.subj-sci  .bar{ background: rgba(46,204,113,0.9); }
+.subj-soc  .bar{ background: rgba(255,165,0,0.9); }
+.subj-oth  .bar{ background: rgba(160,170,190,0.9); }
+
+.subjectBox{
+  margin-top: 10px;
+  display:grid;
+  gap:10px;
+  padding-left: 16px; /* プリントの階層を1つ落として見せる */
+  border-left: 1px dashed rgba(255,255,255,0.10);
+}
+
+/* bottom sheet（教科選択） */
+.sheet{
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+.sheetBackdrop{
+  position:absolute;
+  inset:0;
+  background: rgba(0,0,0,0.58);
+}
+.sheetBody{
+  position:absolute;
+  left:0; right:0; bottom:0;
+  background: rgba(12,16,24,0.96);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  border-top: 1px solid var(--line);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  max-height: 82vh;
+  overflow:auto;
+}
+.sheetTitle{ font-weight: 900; font-size: 16px; }
+.sheetList{
+  margin-top: 10px;
+  display:grid;
+  gap: 10px;
+}
+.sheetItem{
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,0.05);
+  cursor:pointer;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:10px;
-  cursor:pointer;
+  gap: 10px;
 }
-.subjBadge{
-  padding:6px 10px;
-  border-radius:999px;
-  border:1px solid var(--line);
-  font-size:12px;
-  color: var(--muted);
-  background: rgba(255,255,255,.03);
+.sheetItem:hover{ background: rgba(255,255,255,0.08); }
+.sheetItem.on{
+  border-color: rgba(63,124,255,0.6);
+  background: rgba(63,124,255,0.14);
 }
-.subjBox{
-  border-style:dashed !important;
-}
-.subjBox.math{ background: var(--subj-math); }
-.subjBox.jp{   background: var(--subj-jp); }
-.subjBox.en{   background: var(--subj-en); }
-.subjBox.sci{  background: var(--subj-sci); }
-.subjBox.soc{  background: var(--subj-soc); }
-.subjBox.oth{  background: var(--subj-oth); }
-
-.indent{
-  margin-left: 22px;
+.sheetOther{
+  margin-top: 10px;
+  border: 1px dashed rgba(255,255,255,0.15);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255,255,255,0.04);
 }
 
-/* toast */
-.toast{
-  position: sticky;
-  bottom: 10px;
-  margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(47,191,122,.15);
-  box-shadow: var(--shadow);
-  font-weight: 650;
-}
-
-/* fatal */
-.fatal{
-  max-width:1200px;
-  margin:12px auto;
-  padding:12px;
-  border:1px solid #442;
-  background:#1a1212;
-  color:#ffd;
-  display:none;
-  border-radius:12px;
-}
-
-/* modal (bottom sheet) */
+/* Qピッカー モーダル */
 .modal{
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 2100;
 }
-.modal__backdrop{
+.modalBackdrop{
   position:absolute;
   inset:0;
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,0.62);
 }
-.modal__sheet{
+.modalBody{
   position:absolute;
-  left:0; right:0; bottom:0;
-  background: var(--panel);
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, 96vw);
+  background: rgba(12,16,24,0.96);
   border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
   box-shadow: var(--shadow);
-  max-height: 88vh;
-  overflow: hidden;
-}
-.modal__sheet--wide{
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.modal__head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding: 12px 14px;
-  border-bottom:1px solid var(--line);
-}
-.modal__title{
-  font-weight: 800;
-}
-.modal__body{
-  padding: 12px 14px;
-  overflow: auto;
-  max-height: 78vh;
-}
-.modal__body--split{
-  display:grid;
-  grid-template-columns: 1.2fr .8fr;
-  gap: 12px;
-}
-@media (max-width: 900px){
-  .modal__body--split{ grid-template-columns: 1fr; }
-}
-
-.sheetGrid{
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 10px;
-}
-@media (max-width: 520px){
-  .sheetGrid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-}
-.selectBtn{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
 }

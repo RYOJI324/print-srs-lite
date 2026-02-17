@@ -2,16 +2,16 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Print SRS Lite (Pro)</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Print SRS Lite Pro</title>
+  <link rel="stylesheet" href="./styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/heic2any/dist/heic2any.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar__left">
       <div class="brand">Print SRS Lite</div>
-      <div class="subtitle">Q単位 / 4段階SRS / 全マスク隠し / 透過タップ / Nodeなし(IndexedDB)</div>
+      <div class="subtitle">4段階SRS / 全マスク隠し / 透過タップ / IndexedDB</div>
     </div>
     <nav class="topbar__nav">
       <button class="btn" data-nav="home">ホーム</button>
@@ -20,42 +20,47 @@
     </nav>
   </header>
 
+  <!-- HOMEに出すトースト -->
+  <div id="homeToast" class="toast hidden"></div>
+
   <main class="container">
+
     <!-- HOME -->
     <section id="view-home" class="view">
-      <div class="row space">
-        <h2>プリント一覧</h2>
+      <div class="row space wrap">
+        <div>
+          <h2>プリント一覧</h2>
+          <div class="pill">期限Q：<span id="dueCount">0</span></div>
+        </div>
 
-        <div class="row">
-          <button class="btn" id="btnBackup">バックアップ(JSON)</button>
-          <button class="btn" id="btnRestore">復元(JSON)</button>
+        <!-- バックアップ/復元は右上寄せ -->
+        <div class="row wrap">
+          <button id="btnBackup" class="btn">バックアップ(JSON)</button>
+          <button id="btnRestore" class="btn">復元</button>
+          <input id="restoreFile" type="file" accept="application/json" class="hidden" />
         </div>
       </div>
 
-      <div class="muted small homeNote">
-        バックアップ(JSON)はダウンロードされます。iPadなら、共有 → Google Drive に保存が安全です。
+      <div class="note">
+        バックアップ(JSON)はダウンロードされます。iPadなら、共有 → <b>Google Drive</b> に保存が安全です。
       </div>
 
       <div class="card">
-        <div class="row space">
-          <div class="row">
+        <div class="row space wrap">
+          <div class="row wrap">
             <button class="btn" id="btnSelectAll">全選択</button>
             <button class="btn" id="btnClearSelect">選択解除</button>
-
-            <button class="btn" id="btnMoveSelected" disabled>選択プリントを移動</button>
-            <button class="btn" id="btnPrintSelected" disabled>選択をA4PDF印刷</button>
-
-            <button class="btn danger" id="btnDeleteSelected" disabled>選択したプリントを削除</button>
           </div>
-          <div class="pill">
-            期限Q：<span id="dueCount">0</span>
+
+          <div class="row wrap">
+            <button class="btn" id="btnMoveSelected" disabled>選択プリントを移動</button>
+            <button class="btn" id="btnPrintSelectedPdf" disabled>選択をA4PDF印刷</button>
+            <button class="btn danger" id="btnDeleteSelected" disabled>選択したプリントを削除</button>
           </div>
         </div>
 
         <div id="printList" class="list"></div>
       </div>
-
-      <div id="homeToast" class="toast hidden"></div>
     </section>
 
     <!-- ADD -->
@@ -68,38 +73,41 @@
           </label>
 
           <label>教科
-            <button class="btn selectBtn" id="btnAddSubjectPick">
-              <span id="addSubjectLabel">算数</span>
-              <span class="muted small">▼</span>
-            </button>
-            <input id="addSubjectOther" class="hidden" type="text" placeholder="教科を自由記載（例：漢字 / 歴史 / 英検）" />
+            <div class="row wrap">
+              <input id="addSubject" type="text" readonly value="算数" />
+              <button id="btnPickAddSubject" class="btn">教科を選ぶ</button>
+            </div>
+            <div class="muted small">「その他」を選ぶと自由記載できます。</div>
           </label>
 
           <label>画像ファイル（JPEG/PNG/HEIC）
             <input id="addFile" type="file" accept="image/*,.heic,.heif" />
           </label>
-          <div class="row">
+
+          <div class="row wrap">
             <button id="btnCreatePrint" class="btn primary">取り込み & 追加</button>
             <button class="btn" data-nav="home">戻る</button>
           </div>
           <div id="addStatus" class="muted"></div>
-          <div class="muted small">
-            ※PNG/JPEGが安定。HEICは形式により変換不可の場合あり（その場合はPNG/JPEGで）。
-          </div>
         </div>
       </div>
     </section>
 
     <!-- EDIT -->
     <section id="view-edit" class="view hidden">
-      <div class="row space">
+      <div class="row space wrap">
         <div>
-          <h2 id="editTitle" class="clickEdit">編集 <span class="hint">✏️ タップで名前変更</span></h2>
-          <div id="editMeta" class="muted clickEdit"><span class="hint">✏️ タップで教科変更</span></div>
+          <h2 id="editTitle" class="clickEdit">
+            編集 <span class="hint">✏️ タップで名前変更</span>
+          </h2>
+          <div id="editMeta" class="muted clickEdit">
+            <span class="hint">✏️ タップで教科変更</span>
+          </div>
         </div>
-        <div class="row">
-          <button class="btn" id="btnExportPdf">PDF印刷（A4）</button>
-          <button class="btn done" id="btnEditDone">編集完了</button>
+
+        <div class="row wrap">
+          <!-- 黒塗りPDF出力ボタンは不要（削除） -->
+          <button class="btn done" id="btnEditDone">✅ 編集完了</button>
         </div>
       </div>
 
@@ -118,10 +126,8 @@
             <li>プリント上でドラッグ → <b>黒塗り追加</b></li>
             <li>黒塗り上でドラッグ → <b>黒塗り移動</b></li>
             <li>黒塗りクリック → <b>選択</b>（黄色太枠）</li>
-            <li>矢印キー → <b>1px移動</b>（Shiftで10px）</li>
-            <li>Alt/Option＋矢印 → <b>サイズ変更</b>（Shiftで10px）</li>
-            <li>Shift＋ドラッグ → <b>パン</b></li>
-            <li>iPad：2本指でピンチズーム / 2本指ドラッグでパン / 長押しでパン</li>
+            <li>Shift＋ドラッグ → <b>パン</b>（PC）</li>
+            <li>iPad：2本指でピンチズーム / 2本指ドラッグでパン</li>
           </ul>
 
           <div class="divider"></div>
@@ -129,13 +135,13 @@
           <h3>選択・編集</h3>
           <div class="muted">選択数：<span id="selCount">0</span></div>
 
-          <div class="row">
+          <div class="row wrap">
             <button id="btnMoveSel" class="btn primary" disabled>選択をこのQへ移動</button>
             <button id="btnDeleteSel" class="btn danger" disabled>選択マスク削除</button>
             <button id="btnClearSel" class="btn" disabled>選択解除</button>
           </div>
 
-          <div class="row">
+          <div class="row wrap">
             <button id="btnRenameGroup" class="btn" disabled>Q名変更</button>
             <button id="btnDeleteGroup" class="btn danger" disabled>Q削除</button>
           </div>
@@ -149,12 +155,12 @@
         </aside>
 
         <section class="card canvasWrap">
-          <div class="row space">
+          <div class="row space wrap">
             <div class="muted">
               現在のQ：<span id="currentGroupLabel">(未選択)</span>
               / このQのマスク数：<span id="currentGroupMaskCount">0</span>
             </div>
-            <div class="row">
+            <div class="row wrap">
               <button id="btnFit" class="btn">フィット</button>
               <button id="btnZoomIn" class="btn">＋</button>
               <button id="btnZoomOut" class="btn">－</button>
@@ -174,13 +180,13 @@
 
     <!-- TODAY -->
     <section id="view-today" class="view hidden">
-      <div class="row space">
+      <div class="row space wrap">
         <div>
           <h2>今日の復習</h2>
           <div id="todayMeta" class="muted"></div>
         </div>
-        <div class="row">
-          <button class="btn" id="btnTodayFilter">教科で選ぶ</button>
+        <div class="row wrap">
+          <button id="btnTodayFilter" class="btn">教科を選ぶ</button>
           <button class="btn" data-nav="home">ホーム</button>
         </div>
       </div>
@@ -191,13 +197,13 @@
 
       <!-- REVIEW -->
       <section id="view-review" class="hidden">
-        <div class="row space">
+        <div class="row space wrap">
           <div>
             <h3 id="reviewTitle">復習</h3>
             <div id="reviewMeta" class="muted"></div>
             <div class="muted">今日の残り：あと <span id="reviewRemaining">0</span> 問</div>
           </div>
-          <div class="row">
+          <div class="row wrap">
             <button id="btnSkipToday" class="btn">今日はスキップ</button>
             <button id="btnOpenEditFromReview" class="btn">このプリントを編集</button>
             <button id="btnBackToToday" class="btn">一覧へ戻る</button>
@@ -209,33 +215,28 @@
             <canvas id="reviewCanvas" width="800" height="600"></canvas>
           </div>
 
-          <div class="row">
+          <div class="row wrap">
             <button class="btn danger" data-review-rate="again">もう一度</button>
             <button class="btn" data-review-rate="hard">難しい</button>
             <button class="btn primary" data-review-rate="good">正解</button>
             <button class="btn" data-review-rate="easy">簡単</button>
           </div>
 
-          <div class="row" style="margin-top:12px">
-            <button id="btnPrevQ" class="btn">← 前のQ</button>
-            <button id="btnNextQ" class="btn primary">次のQ →</button>
-          </div>
-
-          <div class="muted small">
+          <div class="muted small" style="margin-top:10px">
             ※黒塗りをタップすると、その部分だけ一時的に透過して答えが見えます（もう一度タップで戻る）。<br>
-            ただし他のQの答えは見えないように、プリント内の全マスクは常に隠します。
+            ※ピンチズーム/2本指パン対応（iPad）
           </div>
         </div>
       </section>
 
       <!-- DONE -->
       <section id="view-done" class="hidden">
-        <div class="row space">
+        <div class="row space wrap">
           <div>
             <h3>本日の分は終了！</h3>
-            <div class="muted">おつかれさまでした。よく頑張りました。</div>
+            <div class="muted">おつかれさまでした。</div>
           </div>
-          <div class="row">
+          <div class="row wrap">
             <button class="btn primary" data-nav="home">ホームへ</button>
             <button class="btn" data-nav="today">今日の復習へ戻る</button>
           </div>
@@ -251,120 +252,64 @@
         </div>
       </section>
     </section>
+
   </main>
 
-  <div id="fatal" class="fatal"></div>
-
-  <!-- ===== Subject picker (bottom sheet) ===== -->
-  <section id="subjectModal" class="modal hidden" aria-hidden="true">
-    <div class="modal__backdrop" data-modal-close="subject"></div>
-    <div class="modal__sheet">
-      <div class="modal__head">
-        <div class="modal__title" id="subjectModalTitle">教科を選択</div>
-        <button class="btn" data-modal-close="subject">閉じる</button>
-      </div>
-      <div class="modal__body">
-        <div id="subjectOptions" class="sheetGrid"></div>
-        <div class="divider"></div>
-        <div class="muted small">「その他」を選ぶと自由記載できます。</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== Move selected prints (subject select) ===== -->
-  <section id="moveModal" class="modal hidden" aria-hidden="true">
-    <div class="modal__backdrop" data-modal-close="move"></div>
-    <div class="modal__sheet">
-      <div class="modal__head">
-        <div class="modal__title">移動先の教科を選択</div>
-        <button class="btn" data-modal-close="move">閉じる</button>
-      </div>
-      <div class="modal__body">
-        <div class="muted small" style="margin-bottom:8px">選択したプリントの教科をまとめて変更します。</div>
-        <div id="moveOptions" class="sheetGrid"></div>
-        <div id="moveOtherWrap" class="hidden" style="margin-top:10px">
-          <input id="moveOtherInput" type="text" placeholder="教科を自由記載（例：漢字 / 英検 / 地理）" />
-          <div class="row" style="margin-top:8px">
-            <button class="btn primary" id="btnMoveOtherApply">この教科へ移動</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== Today subject filter (multi select) ===== -->
-  <section id="todayModal" class="modal hidden" aria-hidden="true">
-    <div class="modal__backdrop" data-modal-close="today"></div>
-    <div class="modal__sheet">
-      <div class="modal__head">
-        <div class="modal__title">今日の復習：教科を選択（複数OK）</div>
-        <button class="btn" data-modal-close="today">閉じる</button>
-      </div>
-      <div class="modal__body">
-        <div id="todayOptions" class="sheetGrid"></div>
-        <div class="divider"></div>
-        <div class="row">
-          <button class="btn" id="btnTodayAll">すべて</button>
-          <button class="btn" id="btnTodayClear">クリア</button>
-          <button class="btn primary" id="btnTodayApply">適用</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== Practice Picker (choose Q(s) even if not due) ===== -->
-  <section id="pickerModal" class="modal hidden" aria-hidden="true">
-    <div class="modal__backdrop" data-modal-close="picker"></div>
-    <div class="modal__sheet modal__sheet--wide">
-      <div class="modal__head">
+  <!-- 教科選択シート（bottom sheet） -->
+  <div id="subjectSheet" class="sheet hidden" aria-hidden="true">
+    <div class="sheetBackdrop"></div>
+    <div class="sheetBody">
+      <div class="row space wrap">
         <div>
-          <div class="modal__title" id="pickerTitle">学習するQを選択</div>
-          <div class="muted small" id="pickerSub"></div>
+          <div id="subjectSheetTitle" class="sheetTitle">教科を選択</div>
+          <div id="subjectSheetSub" class="muted small">複数選択できます</div>
         </div>
-        <div class="row">
-          <button class="btn" id="pickerSelectAll">全選択</button>
-          <button class="btn" id="pickerClear">クリア</button>
-          <button class="btn primary" id="pickerStart">開始（<span id="pickerSelCount">0</span>）</button>
-          <button class="btn" data-modal-close="picker">閉じる</button>
-        </div>
+        <button id="subjectSheetClose" class="btn">閉じる</button>
       </div>
 
-      <div class="modal__body modal__body--split">
-        <div class="card canvasWrap">
-          <div class="row space">
-            <div class="muted small">画像の黒塗り（Q）をタップして選択できます</div>
-            <div class="row">
-              <button class="btn" id="pickerFit">フィット</button>
-              <button class="btn" id="pickerZoomIn">＋</button>
-              <button class="btn" id="pickerZoomOut">－</button>
-            </div>
-          </div>
-          <div id="pickerStage" class="stage" style="height:48vh;min-height:320px">
-            <canvas id="pickerCanvas" width="800" height="600"></canvas>
-          </div>
-          <div class="muted small" style="margin-top:8px">
-            iPad：ピンチでズーム / 2本指ドラッグでパン / 1本指タップでQ選択
-          </div>
-        </div>
+      <div id="subjectSheetList" class="sheetList"></div>
 
-        <div class="card">
-          <div class="muted small" style="margin-bottom:8px">Q一覧（チェックでも選択できます）</div>
-          <div id="pickerGroupList" class="list"></div>
+      <div id="subjectOtherWrap" class="sheetOther hidden">
+        <div class="muted small" style="margin-bottom:6px;">その他（自由記載）</div>
+        <input id="subjectOtherInput" type="text" placeholder="例：漢字、英単語、地理 など" />
+      </div>
+
+      <div class="row space wrap" style="margin-top:12px;">
+        <button id="subjectSheetCancel" class="btn">キャンセル</button>
+        <button id="subjectSheetOk" class="btn primary">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 任意学習：Q選択ピッカー（プリント画像上で選択） -->
+  <div id="pickerModal" class="modal hidden" aria-hidden="true">
+    <div class="modalBackdrop"></div>
+    <div class="modalBody">
+      <div class="row space wrap">
+        <div>
+          <div class="sheetTitle">学習するQを選択</div>
+          <div class="muted small">黒塗り＋Qラベルを見ながら選択できます（複数OK）</div>
+        </div>
+        <div class="pill">選択：<span id="pickerSelCount">0</span></div>
+      </div>
+
+      <div id="pickerStage" class="stage" style="margin-top:10px;">
+        <canvas id="pickerCanvas" width="800" height="600"></canvas>
+      </div>
+
+      <div class="row space wrap" style="margin-top:12px;">
+        <div class="muted small">ピンチズーム / 2本指パン対応</div>
+        <div class="row wrap">
+          <button id="pickerCancel" class="btn">閉じる</button>
+          <button id="pickerStart" class="btn primary" disabled>学習を開始</button>
         </div>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- hidden file for restore -->
-  <input id="restoreFile" type="file" accept="application/json" class="hidden" />
+  <!-- 印刷用iframe（ポップアップ回避） -->
+  <iframe id="printFrame" class="hidden"></iframe>
 
-  <footer class="footer">
-    <div class="muted small">
-      保存先：IndexedDB（このブラウザ内）。プリント削除＝関連データも全部削除。
-    </div>
-  </footer>
-
-  <!-- ★ キャッシュ回避：ここを上げ直すたびに数字を変えると確実反映 -->
   <script src="./app.js?v=20260217-9"></script>
 </body>
 </html>
