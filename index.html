@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Print SRS Lite (Pro)</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/heic2any/dist/heic2any.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__left">
+      <div class="brand">Print SRS Lite</div>
+      <div class="subtitle">Q単位 / 4段階SRS / 全マスク隠し / 透過タップ / Nodeなし(IndexedDB)</div>
+    </div>
+    <nav class="topbar__nav">
+      <button class="btn" data-nav="home">ホーム</button>
+      <button class="btn" data-nav="add">プリント追加</button>
+      <button class="btn primary" data-nav="today">今日の復習</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- HOME -->
+    <section id="view-home" class="view">
+      <h2>プリント一覧</h2>
+
+      <div class="card">
+        <!-- Header row: left actions + right backup controls -->
+        <div class="row space homeHeaderRow">
+          <div class="row">
+            <button class="btn" id="btnSelectAll">全選択</button>
+            <button class="btn" id="btnClearSelect">選択解除</button>
+            <button class="btn danger" id="btnDeleteSelected" disabled>選択したプリントを削除</button>
+            <div class="pill">期限Q：<span id="dueCount">0</span></div>
+          </div>
+
+          <div class="homeBackupRightBlock">
+            <div class="row homeBackupRightTop">
+              <div id="backupBadge" class="badge"></div>
+              <button class="btn" id="btnBackupJson">バックアップ</button>
+              <button class="btn" id="btnRestoreJson">復元</button>
+              <input id="restoreFile" type="file" accept="application/json,.json" class="hidden" />
+            </div>
+            <!-- ★説明文はバックアップボタンの下 -->
+            <div id="backupHelp" class="muted small homeBackupHelp"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Bulk actions -->
+        <div class="row space">
+          <div class="row">
+            <button class="btn" id="btnMoveSelected" disabled>選択プリントを移動</button>
+            <button class="btn primary" id="btnExportSelectedPdf" disabled>選択プリントをA4 PDF印刷</button>
+          </div>
+        </div>
+
+        <div id="printList" class="list"></div>
+      </div>
+
+      <div id="homeToast" class="toast hidden"></div>
+    </section>
+
+    <!-- ADD -->
+    <section id="view-add" class="view hidden">
+      <h2>プリント追加</h2>
+      <div class="card">
+        <div class="form">
+          <label>タイトル
+            <input id="addTitle" type="text" placeholder="例：算数プリント 2/16" />
+          </label>
+
+          <label>教科
+            <select id="addSubject">
+              <option value="算数">算数</option>
+              <option value="国語">国語</option>
+              <option value="理科">理科</option>
+              <option value="社会">社会</option>
+              <option value="英語">英語</option>
+              <option value="__custom__">その他（自由記載）</option>
+            </select>
+          </label>
+
+          <!-- ★その他（自由記載）入力欄 -->
+          <label id="addSubjectCustomWrap" class="hidden">自由記載（教科名）
+            <input id="addSubjectCustom" type="text" placeholder="例：漢字 / 計算 / 英単語 / 社会(地理) など" />
+          </label>
+
+          <label>画像ファイル（JPEG/PNG/HEIC）
+            <input id="addFile" type="file" accept="image/*,.heic,.heif" />
+          </label>
+          <div class="row">
+            <button id="btnCreatePrint" class="btn primary">取り込み & 追加</button>
+            <button class="btn" data-nav="home">戻る</button>
+          </div>
+          <div id="addStatus" class="muted"></div>
+          <div class="muted small">
+            ※PNG/JPEGが安定。HEICは形式により変換不可の場合あり（その場合はPNG/JPEGで）。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EDIT -->
+    <section id="view-edit" class="view hidden">
+      <div class="row space">
+        <div>
+          <h2 id="editTitle" class="clickEdit">編集 <span class="hint">✏️ タップで名前変更</span></h2>
+          <div id="editMeta" class="muted clickEdit"><span class="hint">✏️ タップで教科変更</span></div>
+        </div>
+        <div class="row">
+          <button class="btn" data-nav="home">ホーム</button>
+          <button class="btn" id="btnEditDone">編集完了</button>
+        </div>
+      </div>
+
+      <div class="gridEdit">
+        <aside class="card">
+          <div class="row space">
+            <h3>Q一覧</h3>
+            <button id="btnNewGroup" class="btn">新規Q</button>
+          </div>
+          <div id="groupList" class="list"></div>
+
+          <div class="divider"></div>
+
+          <h3>操作</h3>
+          <ul class="muted small bullets">
+            <li>プリント上でドラッグ → <b>黒塗り追加</b></li>
+            <li>黒塗り上でドラッグ → <b>黒塗り移動</b></li>
+            <li>黒塗りクリック → <b>選択</b>（黄色太枠）</li>
+            <li>矢印キー → <b>1px移動</b>（Shiftで10px）</li>
+            <li>Alt/Option＋矢印 → <b>サイズ変更</b>（Shiftで10px）</li>
+            <li>Shift＋ドラッグ → <b>パン</b></li>
+            <li>iPad：2本指でピンチズーム / 2本指ドラッグでパン / 長押しでパン</li>
+          </ul>
+
+          <div class="divider"></div>
+
+          <h3>選択・編集</h3>
+          <div class="muted">選択数：<span id="selCount">0</span></div>
+
+          <div class="row">
+            <button id="btnMoveSel" class="btn primary" disabled>選択をこのQへ移動</button>
+            <button id="btnDeleteSel" class="btn danger" disabled>選択マスク削除</button>
+            <button id="btnClearSel" class="btn" disabled>選択解除</button>
+          </div>
+
+          <div class="row">
+            <button id="btnRenameGroup" class="btn" disabled>Q名変更</button>
+            <button id="btnDeleteGroup" class="btn danger" disabled>Q削除</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="muted small">
+            ここで作ったQは「今日の復習」に出ます。<br>
+            追加直後のQも、評価（もう一度/難しい/正解/簡単）すればSRSに乗ります。
+          </div>
+        </aside>
+
+        <section class="card canvasWrap">
+          <div class="row space">
+            <div class="muted">
+              現在のQ：<span id="currentGroupLabel">(未選択)</span>
+              / このQのマスク数：<span id="currentGroupMaskCount">0</span>
+            </div>
+            <div class="row">
+              <button id="btnFit" class="btn">フィット</button>
+              <button id="btnZoomIn" class="btn">＋</button>
+              <button id="btnZoomOut" class="btn">－</button>
+            </div>
+          </div>
+
+          <div id="stage" class="stage">
+            <canvas id="canvas" width="800" height="600"></canvas>
+          </div>
+
+          <div class="muted small">
+            ※問題番号など「消したい文字」も黒塗りで隠せます。
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- TODAY -->
+    <section id="view-today" class="view hidden">
+      <div class="row space">
+        <div>
+          <h2>今日の復習</h2>
+          <div id="todayMeta" class="muted"></div>
+        </div>
+        <div class="row">
+          <button id="btnTodayFilter" class="btn">教科を選び直す</button>
+          <button class="btn" data-nav="home">ホーム</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="todayList" class="list"></div>
+      </div>
+
+      <!-- REVIEW -->
+      <section id="view-review" class="hidden">
+        <section id="view-done" class="hidden">
+          <div class="card">
+            <h3>本日の分、終了！おつかれさまでした。</h3>
+            <div class="muted">完了：<span id="doneCount">0</span> 問</div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn primary" data-nav="home">ホームへ</button>
+              <button class="btn" data-nav="today">今日の復習へ戻る</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="row space">
+          <div>
+            <h3 id="reviewTitle">復習</h3>
+            <div id="reviewMeta" class="muted"></div>
+            <div class="muted">今日の残り：あと <span id="reviewRemaining">0</span> 問</div>
+          </div>
+          <div class="row">
+            <button id="btnSkipToday" class="btn">今日はスキップ</button>
+            <button id="btnOpenEditFromReview" class="btn">このプリントを編集</button>
+            <button id="btnBackToToday" class="btn">一覧へ戻る</button>
+          </div>
+        </div>
+
+        <div class="card canvasWrap">
+          <div id="reviewStage" class="stage">
+            <canvas id="reviewCanvas" width="800" height="600"></canvas>
+          </div>
+
+          <div class="row">
+            <button class="btn danger" data-review-rate="again">もう一度</button>
+            <button class="btn" data-review-rate="hard">難しい</button>
+            <button class="btn primary" data-review-rate="good">正解</button>
+            <button class="btn" data-review-rate="easy">簡単</button>
+          </div>
+
+          <div class="row" style="margin-top:12px">
+            <button id="btnPrevQ" class="btn">← 前のQ</button>
+            <button id="btnNextQ" class="btn primary">次のQ →</button>
+          </div>
+
+          <div class="muted small">
+            ※黒塗りをタップすると、その部分だけ一時的に透過して答えが見えます（もう一度タップで戻る）。<br>
+            ただし他のQの答えは見えないように、プリント内の全マスクは常に隠します。
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="fatal" style="max-width:1200px;margin:12px auto;padding:12px;border:1px solid #442;background:#1a1212;color:#ffd;display:none;border-radius:12px;"></div>
+
+  <footer class="footer">
+    <div class="muted small">
+      保存先：IndexedDB（このブラウザ内）。プリント削除＝関連データも全部削除。
+    </div>
+  </footer>
+
+  <!-- Bottom Sheet Modal -->
+  <div id="sheetOverlay" class="sheetOverlay hidden"></div>
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="sheetHandle"></div>
+    <div class="sheetHeader">
+      <div id="sheetTitle" class="sheetTitle">選択</div>
+      <button id="sheetClose" class="btn">閉じる</button>
+    </div>
+    <div id="sheetBody" class="sheetBody"></div>
+    <div id="sheetFooter" class="sheetFooter hidden">
+      <button id="sheetCancel" class="btn">キャンセル</button>
+      <button id="sheetOk" class="btn primary">OK</button>
+    </div>
+  </div>
+
+  <script src="./app.js?v=20260217-final-additive3"></script>
+</body>
+</html>

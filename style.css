@@ -1,0 +1,351 @@
+:root{
+  --bg:#0b0c10;
+  --panel:#111319;
+  --text:#e9eef6;
+  --muted:#a7b2c4;
+  --line:#242a36;
+  --btn:#1f2633;
+  --btn2:#2a3447;
+  --danger:#c04b4b;
+  --accent:#3f7cff;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+
+  /* subject accent (控えめ) */
+  --subj-math: rgba(63,124,255,.14);   /* 算数：青 */
+  --subj-jpn:  rgba(255,112,112,.12);  /* 国語：赤系 */
+  --subj-sci:  rgba(92,255,170,.11);   /* 理科：緑系 */
+  --subj-soc:  rgba(255,205,77,.12);   /* 社会：黄系 */
+  --subj-eng:  rgba(185,125,255,.12);  /* 英語：紫系 */
+  --subj-oth:  rgba(255,255,255,.06);  /* その他/自由記載：グレー */
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  background: linear-gradient(180deg, #0b0c10, #0b0c10 40%, #07080b);
+  color:var(--text);
+}
+.hidden{display:none !important}
+
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--line);
+  position:sticky;
+  top:0;
+  background: rgba(11,12,16,.92);
+  backdrop-filter: blur(10px);
+  z-index:10;
+}
+.brand{font-weight:700}
+.subtitle{color:var(--muted); font-size:12px; margin-top:2px}
+.topbar__nav{display:flex; gap:8px; flex-wrap:wrap}
+
+.container{max-width:1200px; margin:0 auto; padding:16px;}
+.view h2{margin:10px 0 14px}
+
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+  box-shadow: var(--shadow);
+}
+
+.gridEdit{
+  display:grid;
+  gap:12px;
+  grid-template-columns: 380px 1fr;
+}
+@media (max-width: 900px){
+  .gridEdit{grid-template-columns:1fr}
+}
+
+.row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.space{justify-content:space-between}
+
+.btn{
+  padding:9px 12px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:var(--btn);
+  color:var(--text);
+  cursor:pointer;
+}
+.btn:hover{background:var(--btn2)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.btn.primary{background: var(--accent); border-color: rgba(255,255,255,.1)}
+.btn.danger{background: var(--danger); border-color: rgba(255,255,255,.1)}
+
+.list{display:grid; gap:10px; margin-top:10px}
+.item{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  background: rgba(255,255,255,.02);
+}
+.itemTitle{font-weight:650}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.divider{height:1px; background:var(--line); margin:12px 0}
+
+.form{display:grid; gap:10px; max-width:560px}
+label{display:grid; gap:6px; font-size:14px}
+input, select{
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.04);
+  color:var(--text);
+  outline:none;
+}
+
+.inlineLabel{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.canvasWrap{padding:12px}
+.stage{
+  margin-top:10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  overflow:hidden;
+  background:#05060a;
+}
+#stage, #reviewStage{
+  width:100%;
+  height:70vh;
+  min-height:480px;
+  position:relative;
+}
+canvas{width:100%; height:100%; display:block; touch-action:none;}
+
+.footer{padding:18px; border-top:1px solid var(--line); text-align:center;}
+.bullets{margin:8px 0 0 18px; padding:0}
+.bullets li{margin:6px 0}
+
+.checkbox{width:18px; height:18px;}
+.pill{
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-size:12px;
+}
+
+/* Backup badge */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-size:12px;
+  min-height: 30px;
+  white-space: nowrap;
+}
+.badge.warn{
+  border-color: rgba(255, 211, 77, .6);
+  color: #ffd34d;
+}
+.badge.ok{
+  border-color: rgba(63, 124, 255, .6);
+  color: #aecdff;
+}
+
+/* Q order buttons */
+.qctl{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+.qbtn{
+  padding:6px 8px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--text);
+  cursor:pointer;
+}
+.qbtn:hover{background: rgba(255,255,255,.07);}
+
+/* clickable edit hints */
+.clickEdit { cursor: pointer; }
+.clickEdit:hover { text-decoration: underline; }
+
+.hint{
+  font-size: 12px;
+  font-weight: 500;
+  opacity: .75;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+@media (max-width: 600px){
+  .hint{ display:block; margin-left:0; margin-top:4px; }
+}
+
+/* Toast (編集完了をわかりやすく) */
+.toast{
+  margin:14px 0 0;
+  padding:12px 14px;
+  border-radius:14px;
+  border:1px solid rgba(63,124,255,.45);
+  background: rgba(63,124,255,.14);
+  color:#e9f1ff;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.toast strong{font-weight:750}
+
+/* Home header layout */
+.homeHeaderRow{align-items:flex-start}
+
+/* 右上バックアップブロック（上段ボタン/下段説明） */
+.homeBackupRightBlock{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+}
+.homeBackupRightTop{
+  gap:8px;
+  align-items:center;
+  justify-content:flex-end;
+}
+.homeBackupHelp{
+  text-align:right;
+  line-height: 1.35;
+  max-width: 420px;
+}
+
+/* Home: subject header (collapsible) */
+.subjectHeader{
+  cursor:pointer;
+  user-select:none;
+  border-style: solid;
+  background: rgba(255,255,255,0.02);
+  position: relative;
+  overflow: hidden;
+}
+.subjectHeader::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: var(--subj-oth);
+  pointer-events:none;
+}
+.subjectHeader:hover::before{ filter: brightness(1.08); }
+
+.subjectHeaderTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  position: relative;
+}
+.chev{
+  opacity:.85;
+  font-size:14px;
+}
+.childIndent{ margin-left: 26px; }
+
+/* subject color mapping (standard only) */
+.subjectHeader[data-subject="算数"]::before{ background: var(--subj-math); }
+.subjectHeader[data-subject="国語"]::before{ background: var(--subj-jpn); }
+.subjectHeader[data-subject="理科"]::before{ background: var(--subj-sci); }
+.subjectHeader[data-subject="社会"]::before{ background: var(--subj-soc); }
+.subjectHeader[data-subject="英語"]::before{ background: var(--subj-eng); }
+/* custom subjects fall back to --subj-oth */
+
+/* Bottom sheet modal */
+.sheetOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.55);
+  z-index:999;
+}
+.sheet{
+  position:fixed;
+  left:0; right:0;
+  bottom:0;
+  background: var(--panel);
+  border-top:1px solid var(--line);
+  border-radius:16px 16px 0 0;
+  box-shadow: var(--shadow);
+  z-index:1000;
+  max-height: 78vh;
+  overflow:auto;
+  padding: 10px 12px 14px;
+}
+.sheetHandle{
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.2);
+  margin: 6px auto 10px;
+}
+.sheetHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.sheetTitle{font-weight:700}
+.sheetBody{padding: 10px 2px}
+.sheetFooter{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  padding-top: 10px;
+  border-top:1px solid var(--line);
+}
+.sheetList{
+  display:grid;
+  gap:8px;
+}
+.sheetChoice{
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.02);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  cursor:pointer;
+}
+.sheetChoice:hover{background: rgba(255,255,255,.06);}
+.sheetChoice.active{
+  border-color: rgba(63,124,255,.7);
+  background: rgba(63,124,255,.10);
+}
+.sheetInput{
+  width:100%;
+}
+
+/* multi-select list */
+.sheetCheck{
+  width: 18px;
+  height: 18px;
+}
+.sheetChoiceLeft{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
