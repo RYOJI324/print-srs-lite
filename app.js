@@ -62,7 +62,7 @@ function subjectClass(s){
 
 /* ========= IndexedDB ========= */
 const DB_NAME = "print_srs_lite_pro_db";
-const DB_VER = 1;
+const DB_VER = 2;
 let dbp = null;
 
 function openDB(){
