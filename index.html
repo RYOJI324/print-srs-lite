@@ -23,37 +23,32 @@
   <main class="container">
     <!-- HOME -->
     <section id="view-home" class="view">
-      <h2>プリント一覧</h2>
+      <div class="row space">
+        <h2>プリント一覧</h2>
+
+        <div class="row">
+          <button class="btn" id="btnBackup">バックアップ(JSON)</button>
+          <button class="btn" id="btnRestore">復元(JSON)</button>
+        </div>
+      </div>
+
+      <div class="muted small homeNote">
+        バックアップ(JSON)はダウンロードされます。iPadなら、共有 → Google Drive に保存が安全です。
+      </div>
 
       <div class="card">
-        <!-- Header row: left actions + right backup controls -->
-        <div class="row space homeHeaderRow">
+        <div class="row space">
           <div class="row">
             <button class="btn" id="btnSelectAll">全選択</button>
             <button class="btn" id="btnClearSelect">選択解除</button>
-            <button class="btn danger" id="btnDeleteSelected" disabled>選択したプリントを削除</button>
-            <div class="pill">期限Q：<span id="dueCount">0</span></div>
-          </div>
 
-          <div class="homeBackupRightBlock">
-            <div class="row homeBackupRightTop">
-              <div id="backupBadge" class="badge"></div>
-              <button class="btn" id="btnBackupJson">バックアップ</button>
-              <button class="btn" id="btnRestoreJson">復元</button>
-              <input id="restoreFile" type="file" accept="application/json,.json" class="hidden" />
-            </div>
-            <!-- ★説明文はバックアップボタンの下 -->
-            <div id="backupHelp" class="muted small homeBackupHelp"></div>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Bulk actions -->
-        <div class="row space">
-          <div class="row">
             <button class="btn" id="btnMoveSelected" disabled>選択プリントを移動</button>
-            <button class="btn primary" id="btnExportSelectedPdf" disabled>選択プリントをA4 PDF印刷</button>
+            <button class="btn" id="btnPrintSelected" disabled>選択をA4PDF印刷</button>
+
+            <button class="btn danger" id="btnDeleteSelected" disabled>選択したプリントを削除</button>
+          </div>
+          <div class="pill">
+            期限Q：<span id="dueCount">0</span>
           </div>
         </div>
 
@@ -73,19 +68,11 @@
           </label>
 
           <label>教科
-            <select id="addSubject">
-              <option value="算数">算数</option>
-              <option value="国語">国語</option>
-              <option value="理科">理科</option>
-              <option value="社会">社会</option>
-              <option value="英語">英語</option>
-              <option value="__custom__">その他（自由記載）</option>
-            </select>
-          </label>
-
-          <!-- ★その他（自由記載）入力欄 -->
-          <label id="addSubjectCustomWrap" class="hidden">自由記載（教科名）
-            <input id="addSubjectCustom" type="text" placeholder="例：漢字 / 計算 / 英単語 / 社会(地理) など" />
+            <button class="btn selectBtn" id="btnAddSubjectPick">
+              <span id="addSubjectLabel">算数</span>
+              <span class="muted small">▼</span>
+            </button>
+            <input id="addSubjectOther" class="hidden" type="text" placeholder="教科を自由記載（例：漢字 / 歴史 / 英検）" />
           </label>
 
           <label>画像ファイル（JPEG/PNG/HEIC）
@@ -111,8 +98,8 @@
           <div id="editMeta" class="muted clickEdit"><span class="hint">✏️ タップで教科変更</span></div>
         </div>
         <div class="row">
-          <button class="btn" data-nav="home">ホーム</button>
-          <button class="btn" id="btnEditDone">編集完了</button>
+          <button class="btn" id="btnExportPdf">PDF印刷（A4）</button>
+          <button class="btn done" id="btnEditDone">編集完了</button>
         </div>
       </div>
 
@@ -193,7 +180,7 @@
           <div id="todayMeta" class="muted"></div>
         </div>
         <div class="row">
-          <button id="btnTodayFilter" class="btn">教科を選び直す</button>
+          <button class="btn" id="btnTodayFilter">教科で選ぶ</button>
           <button class="btn" data-nav="home">ホーム</button>
         </div>
       </div>
@@ -204,17 +191,6 @@
 
       <!-- REVIEW -->
       <section id="view-review" class="hidden">
-        <section id="view-done" class="hidden">
-          <div class="card">
-            <h3>本日の分、終了！おつかれさまでした。</h3>
-            <div class="muted">完了：<span id="doneCount">0</span> 問</div>
-            <div class="row" style="margin-top:10px">
-              <button class="btn primary" data-nav="home">ホームへ</button>
-              <button class="btn" data-nav="today">今日の復習へ戻る</button>
-            </div>
-          </div>
-        </section>
-
         <div class="row space">
           <div>
             <h3 id="reviewTitle">復習</h3>
@@ -251,10 +227,136 @@
           </div>
         </div>
       </section>
+
+      <!-- DONE -->
+      <section id="view-done" class="hidden">
+        <div class="row space">
+          <div>
+            <h3>本日の分は終了！</h3>
+            <div class="muted">おつかれさまでした。よく頑張りました。</div>
+          </div>
+          <div class="row">
+            <button class="btn primary" data-nav="home">ホームへ</button>
+            <button class="btn" data-nav="today">今日の復習へ戻る</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted">
+            今日レビューしたQ：<span id="doneCount">0</span>
+          </div>
+          <div class="muted small" style="margin-top:8px">
+            ※明日以降、期限が来たらまた「今日の復習」に出ます。
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 
-  <div id="fatal" style="max-width:1200px;margin:12px auto;padding:12px;border:1px solid #442;background:#1a1212;color:#ffd;display:none;border-radius:12px;"></div>
+  <div id="fatal" class="fatal"></div>
+
+  <!-- ===== Subject picker (bottom sheet) ===== -->
+  <section id="subjectModal" class="modal hidden" aria-hidden="true">
+    <div class="modal__backdrop" data-modal-close="subject"></div>
+    <div class="modal__sheet">
+      <div class="modal__head">
+        <div class="modal__title" id="subjectModalTitle">教科を選択</div>
+        <button class="btn" data-modal-close="subject">閉じる</button>
+      </div>
+      <div class="modal__body">
+        <div id="subjectOptions" class="sheetGrid"></div>
+        <div class="divider"></div>
+        <div class="muted small">「その他」を選ぶと自由記載できます。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Move selected prints (subject select) ===== -->
+  <section id="moveModal" class="modal hidden" aria-hidden="true">
+    <div class="modal__backdrop" data-modal-close="move"></div>
+    <div class="modal__sheet">
+      <div class="modal__head">
+        <div class="modal__title">移動先の教科を選択</div>
+        <button class="btn" data-modal-close="move">閉じる</button>
+      </div>
+      <div class="modal__body">
+        <div class="muted small" style="margin-bottom:8px">選択したプリントの教科をまとめて変更します。</div>
+        <div id="moveOptions" class="sheetGrid"></div>
+        <div id="moveOtherWrap" class="hidden" style="margin-top:10px">
+          <input id="moveOtherInput" type="text" placeholder="教科を自由記載（例：漢字 / 英検 / 地理）" />
+          <div class="row" style="margin-top:8px">
+            <button class="btn primary" id="btnMoveOtherApply">この教科へ移動</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Today subject filter (multi select) ===== -->
+  <section id="todayModal" class="modal hidden" aria-hidden="true">
+    <div class="modal__backdrop" data-modal-close="today"></div>
+    <div class="modal__sheet">
+      <div class="modal__head">
+        <div class="modal__title">今日の復習：教科を選択（複数OK）</div>
+        <button class="btn" data-modal-close="today">閉じる</button>
+      </div>
+      <div class="modal__body">
+        <div id="todayOptions" class="sheetGrid"></div>
+        <div class="divider"></div>
+        <div class="row">
+          <button class="btn" id="btnTodayAll">すべて</button>
+          <button class="btn" id="btnTodayClear">クリア</button>
+          <button class="btn primary" id="btnTodayApply">適用</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Practice Picker (choose Q(s) even if not due) ===== -->
+  <section id="pickerModal" class="modal hidden" aria-hidden="true">
+    <div class="modal__backdrop" data-modal-close="picker"></div>
+    <div class="modal__sheet modal__sheet--wide">
+      <div class="modal__head">
+        <div>
+          <div class="modal__title" id="pickerTitle">学習するQを選択</div>
+          <div class="muted small" id="pickerSub"></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="pickerSelectAll">全選択</button>
+          <button class="btn" id="pickerClear">クリア</button>
+          <button class="btn primary" id="pickerStart">開始（<span id="pickerSelCount">0</span>）</button>
+          <button class="btn" data-modal-close="picker">閉じる</button>
+        </div>
+      </div>
+
+      <div class="modal__body modal__body--split">
+        <div class="card canvasWrap">
+          <div class="row space">
+            <div class="muted small">画像の黒塗り（Q）をタップして選択できます</div>
+            <div class="row">
+              <button class="btn" id="pickerFit">フィット</button>
+              <button class="btn" id="pickerZoomIn">＋</button>
+              <button class="btn" id="pickerZoomOut">－</button>
+            </div>
+          </div>
+          <div id="pickerStage" class="stage" style="height:48vh;min-height:320px">
+            <canvas id="pickerCanvas" width="800" height="600"></canvas>
+          </div>
+          <div class="muted small" style="margin-top:8px">
+            iPad：ピンチでズーム / 2本指ドラッグでパン / 1本指タップでQ選択
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted small" style="margin-bottom:8px">Q一覧（チェックでも選択できます）</div>
+          <div id="pickerGroupList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- hidden file for restore -->
+  <input id="restoreFile" type="file" accept="application/json" class="hidden" />
 
   <footer class="footer">
     <div class="muted small">
@@ -262,21 +364,7 @@
     </div>
   </footer>
 
-  <!-- Bottom Sheet Modal -->
-  <div id="sheetOverlay" class="sheetOverlay hidden"></div>
-  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="sheetHandle"></div>
-    <div class="sheetHeader">
-      <div id="sheetTitle" class="sheetTitle">選択</div>
-      <button id="sheetClose" class="btn">閉じる</button>
-    </div>
-    <div id="sheetBody" class="sheetBody"></div>
-    <div id="sheetFooter" class="sheetFooter hidden">
-      <button id="sheetCancel" class="btn">キャンセル</button>
-      <button id="sheetOk" class="btn primary">OK</button>
-    </div>
-  </div>
-
-  <script src="./app.js?v=20260217-final-additive3"></script>
+  <!-- ★ キャッシュ回避：ここを上げ直すたびに数字を変えると確実反映 -->
+  <script src="./app.js?v=20260217-9"></script>
 </body>
 </html>

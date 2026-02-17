@@ -1,13 +1,18 @@
 /* Print SRS Lite Pro (Nodeなし / IndexedDB)
-   2026-02-17 update:
-   - iPad PDF: window.open をクリック直後に確保（ポップアップブロック対策）
-   - 「このプリントを復習」：期限が無くても “Qを画像で選んで学習” 可能
-   - Q選択：編集/復習同様に、黒塗り＋Qラベル入りのプリント画像を表示し、単数/複数を選択
-   - 評価ボタンを日本語（もう一度/難しい/正解/簡単）
+   2026-02-17 consolidated
+   - Home: subject collapsible + subtle colors
+   - Home: select -> move subject / bulk A4 print / bulk delete
+   - Subject = preset + "その他(自由記載)" everywhere
+   - Add/Edit: subject picker bottom sheet (no prompt for subject)
+   - Edit: done button highlighted, no Home button in edit header
+   - Edit done -> back to home + toast for a few seconds
+   - Practice: open Q picker even if not due (with image+mask labels), pinch zoom + pan
+   - PDF print: use iframe (no window.open) to avoid iPad popup block
+   - Today: due list + optional subject multi-filter (including custom subjects)
+   - 4 ratings: もう一度/難しい/正解/簡単
 */
 
 const CFG = { maxW: 1600, jpegQ: 0.8, longPressMs: 350 };
-
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const now = () => Date.now();
@@ -23,27 +28,50 @@ function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 function clamp01(v){ return clamp(v, 0, 1); }
 function toDateStr(ms){ return new Date(ms).toLocaleString(); }
 
+const SUBJECT_PRESETS = ["算数","国語","理科","社会","英語","その他"];
 const SUBJECT_ORDER = ["算数","国語","英語","理科","社会","その他"];
-function normSubject(s){
-  const t = (s || "その他").trim();
-  // 「その他:○○」も許容
-  if (t.startsWith("その他:")) return t;
-  return SUBJECT_ORDER.includes(t) ? t : "その他";
+
+function normSubjectForStore(subject, otherText="") {
+  const s = (subject || "その他").trim();
+  if (SUBJECT_PRESETS.includes(s) && s !== "その他") return { subject: s, subjectOther: "" };
+  if (s === "その他") return { subject: "その他", subjectOther: (otherText || "").trim() };
+  // if user provides custom directly, store as その他 + subjectOther
+  return { subject: "その他", subjectOther: s };
 }
-function isOtherSubject(s){
-  return (s || "").trim() === "その他" || (s || "").trim().startsWith("その他:");
+function displaySubject(p) {
+  if (!p) return "その他";
+  if ((p.subject || "その他") !== "その他") return p.subject;
+  return (p.subjectOther || "その他").trim() || "その他";
+}
+function subjectKey(p) {
+  // used for grouping/filtering (custom treated as its own group)
+  const s = displaySubject(p);
+  return s;
+}
+function subjectClass(subj) {
+  if (subj === "算数") return "math";
+  if (subj === "国語") return "jp";
+  if (subj === "英語") return "en";
+  if (subj === "理科") return "sci";
+  if (subj === "社会") return "soc";
+  return "oth";
 }
 
-/* toast */
-let toastTimer = null;
-function showToast(title, sub="", ms=2200){
-  const el = $("#toast");
-  if (!el) return;
-  el.innerHTML = `<div class="toast__title">${escapeHtml(title)}</div>${sub?`<div class="toast__sub">${escapeHtml(sub)}</div>`:""}`;
-  el.classList.remove("hidden");
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=> el.classList.add("hidden"), ms);
+/* =========================
+   Fatal error UI
+   ========================= */
+function showFatal(err){
+  console.error(err);
+  const box = $("#fatal");
+  if (!box) { alert("エラーが発生しました。コンソールをご確認ください。"); return; }
+  box.style.display = "block";
+  box.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px">⚠️ エラーが発生しました（ボタン無反応の原因）</div>
+    <div style="white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;font-size:12px;opacity:.95">${escapeHtml(String(err?.stack || err?.message || err))}</div>
+  `;
 }
+window.addEventListener("error", (e) => showFatal(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => showFatal(e.reason || e));
 
 /* =========================
    IndexedDB
@@ -203,9 +231,10 @@ const state = {
   reviewIndex: -1,
   doneTodayCount: 0,
 
-  // practice mode (due無関係)
   practiceActive: false,
   practicePrintId: null,
+
+  todaySubjectFilter: null, // Set<string> or null(=all)
 };
 
 let cache = { prints:[], pages:[], groups:[], masks:[], srs:[], reviews:[], skips:[] };
@@ -232,20 +261,16 @@ function show(viewId) {
 async function nav(to) {
   state.route = to;
   try {
-    if (to === "home") { state.practiceActive = false; await renderHome(); }
-    else if (to === "add") { state.practiceActive = false; renderAdd(); }
-    else if (to === "edit") { state.practiceActive = false; await renderEdit(); }
-    else if (to === "today") {
-      if (state.practiceActive) await renderPractice();
-      else await renderToday();
-    }
+    if (to === "home") await renderHome();
+    else if (to === "add") renderAdd();
+    else if (to === "edit") await renderEdit();
+    else if (to === "today") await renderToday();
   } catch (e) {
-    console.error("nav error:", e);
+    showFatal(e);
     if (to === "home") show("#view-home");
     if (to === "add") show("#view-add");
     if (to === "edit") show("#view-edit");
     if (to === "today") show("#view-today");
-    alert("画面更新中にエラーが出ました。コンソール(DevTools)に詳細があります。");
   }
 }
 
@@ -256,6 +281,38 @@ document.addEventListener("click", (e) => {
   if (to === "home") state.currentPrintId = null;
   nav(to);
 });
+
+/* =========================
+   Toast (home)
+   ========================= */
+function showHomeToast(msg, ms=2200) {
+  const el = $("#homeToast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(showHomeToast._t);
+  showHomeToast._t = setTimeout(() => el.classList.add("hidden"), ms);
+}
+function flushPendingHomeToast() {
+  const msg = sessionStorage.getItem("homeToast");
+  if (msg) {
+    sessionStorage.removeItem("homeToast");
+    showHomeToast(msg, 2600);
+  }
+}
+
+/* =========================
+   Subject collapse store
+   ========================= */
+function getCollapseMap(){
+  try { return JSON.parse(localStorage.getItem("collapsedSubjects") || "{}"); }
+  catch { return {}; }
+}
+function setCollapsed(subj, v){
+  const map = getCollapseMap();
+  map[subj] = !!v;
+  localStorage.setItem("collapsedSubjects", JSON.stringify(map));
+}
 
 /* =========================
    Delete (cascade)
@@ -312,12 +369,18 @@ async function skipToday(groupId){
    ========================= */
 function updateHomeSelectionUI() {
   const n = state.selectedPrintIds.size;
-  const btn = $("#btnDeleteSelected");
-  if (btn) {
-    btn.disabled = n === 0;
-    btn.textContent = n === 0 ? "選択したプリントを削除" : `選択したプリントを削除（${n}件）`;
+  const btnDel = $("#btnDeleteSelected");
+  const btnMove = $("#btnMoveSelected");
+  const btnPrint = $("#btnPrintSelected");
+
+  if (btnDel) {
+    btnDel.disabled = n === 0;
+    btnDel.textContent = n === 0 ? "選択したプリントを削除" : `選択したプリントを削除（${n}件）`;
   }
+  if (btnMove) btnMove.disabled = n === 0;
+  if (btnPrint) btnPrint.disabled = n === 0;
 }
+
 $("#btnSelectAll")?.addEventListener("click", async () => {
   await refreshCache();
   cache.prints.forEach((p) => state.selectedPrintIds.add(p.id));
@@ -337,19 +400,87 @@ $("#btnDeleteSelected")?.addEventListener("click", async () => {
 });
 
 /* =========================
-   HOME (教科でカテゴリ分け)
+   Backup / Restore (JSON)
    ========================= */
-function groupPrintsBySubject(prints) {
+$("#btnBackup")?.addEventListener("click", async () => {
+  await refreshCache();
+  const payload = {
+    version: 1,
+    exportedAt: now(),
+    data: cache
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `print-srs-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showHomeToast("バックアップを作成しました");
+});
+
+$("#btnRestore")?.addEventListener("click", () => {
+  $("#restoreFile")?.click();
+});
+$("#restoreFile")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const txt = await file.text();
+    const payload = JSON.parse(txt);
+    if (!payload?.data) throw new Error("JSON形式が違います");
+    if (!confirm("復元します。現在のデータは上書きされます。よろしいですか？")) return;
+
+    const d = payload.data;
+    await tx(["prints","pages","groups","masks","srs","reviews","skips"], "readwrite", (st) => {
+      // clear all
+      const clear = (store) => new Promise((res, rej) => {
+        const r = st[store].clear();
+        r.onsuccess = () => res();
+        r.onerror = () => rej(r.error);
+      });
+      return Promise.all([
+        clear("prints"),clear("pages"),clear("groups"),clear("masks"),
+        clear("srs"),clear("reviews"),clear("skips")
+      ]).then(() => {
+        (d.prints||[]).forEach(x => st.prints.put(x));
+        (d.pages||[]).forEach(x => st.pages.put(x));
+        (d.groups||[]).forEach(x => st.groups.put(x));
+        (d.masks||[]).forEach(x => st.masks.put(x));
+        (d.srs||[]).forEach(x => st.srs.put(x));
+        (d.reviews||[]).forEach(x => st.reviews.put(x));
+        (d.skips||[]).forEach(x => st.skips.put(x));
+      });
+    });
+
+    $("#restoreFile").value = "";
+    await renderHome();
+    showHomeToast("復元しました");
+  } catch (err) {
+    showFatal(err);
+    alert("復元に失敗しました。JSONが壊れているか、形式が違います。");
+  }
+});
+
+/* =========================
+   Home: group prints by subject (custom subjects included)
+   ========================= */
+function buildSubjectGroups(prints){
   const map = new Map();
   for (const p of prints) {
-    const subj = normSubject(p.subject);
-    if (!map.has(subj)) map.set(subj, []);
-    map.get(subj).push(p);
+    const key = subjectKey(p);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(p);
   }
-  for (const [k, arr] of map.entries()) {
-    arr.sort((a,b) => b.createdAt - a.createdAt);
-  }
-  return map;
+  for (const [k, arr] of map.entries()) arr.sort((a,b)=>b.createdAt-a.createdAt);
+
+  // order: presets first if present, then custom alphabetical
+  const presetKeys = SUBJECT_ORDER.filter(s => map.has(s));
+  const customKeys = Array.from(map.keys())
+    .filter(k => !SUBJECT_ORDER.includes(k))
+    .sort((a,b)=>a.localeCompare(b,"ja"));
+  return [...presetKeys, ...customKeys].map(k => [k, map.get(k)]);
 }
 
 function renderOnePrintItem(p) {
@@ -358,20 +489,19 @@ function renderOnePrintItem(p) {
   const checked = state.selectedPrintIds.has(p.id);
 
   const el = document.createElement("div");
-  el.className = "item";
+  el.className = "item indent";
   el.innerHTML = `
     <div class="row space">
       <div class="row" style="align-items:flex-start">
         <input class="checkbox" type="checkbox" data-print-check="${p.id}" ${checked ? "checked" : ""}/>
         <div>
           <div class="itemTitle">${escapeHtml(p.title)}</div>
-          <div class="muted small">${escapeHtml(normSubject(p.subject))} / ${new Date(p.createdAt).toLocaleDateString()} / Q:${gCount} / mask:${mCount}</div>
+          <div class="muted small">${escapeHtml(displaySubject(p))} / ${new Date(p.createdAt).toLocaleDateString()} / Q:${gCount} / mask:${mCount}</div>
         </div>
       </div>
       <div class="row">
         <button class="btn" data-open-edit="${p.id}">編集</button>
-        <button class="btn" data-open-practice="${p.id}">このプリントを学習</button>
-        <button class="btn primary" data-open-today="${p.id}">このプリントを復習</button>
+        <button class="btn primary" data-open-practice="${p.id}">このプリントを学習</button>
         <button class="btn danger" data-del-print="${p.id}">削除</button>
       </div>
     </div>
@@ -391,23 +521,9 @@ function renderOnePrintItem(p) {
     nav("edit");
   });
 
-  // 期限があるなら従来通り “due” を開く。無いならQ選択学習へ誘導
-  el.querySelector("[data-open-today]")?.addEventListener("click", async () => {
-    await refreshCache();
-    const due = computeDueGroups().filter(({ g }) => g.printId === p.id);
-    if (due.length > 0) {
-      state.currentPrintId = p.id;
-      state.practiceActive = false;
-      await nav("today");
-      setTimeout(() => openReview(due[0].g.id), 0);
-    } else {
-      // 期限なし＝学習ピッカーへ
-      openPracticePicker(p.id, { reason: "dueEmpty" });
-    }
-  });
-
-  el.querySelector("[data-open-practice]")?.addEventListener("click", () => {
-    openPracticePicker(p.id, { reason: "manual" });
+  el.querySelector("[data-open-practice]")?.addEventListener("click", async () => {
+    state.currentPrintId = p.id;
+    await tryOpenPracticeOrFirstDue(p.id);
   });
 
   el.querySelector("[data-del-print]")?.addEventListener("click", async () => {
@@ -435,41 +551,41 @@ async function renderHome() {
   const prints = cache.prints.slice().sort((a,b)=>b.createdAt-a.createdAt);
   if (prints.length === 0) {
     list.innerHTML = `<div class="item muted">まだプリントがありません</div>`;
+    flushPendingHomeToast();
     return;
   }
 
-  const bySubj = groupPrintsBySubject(prints);
+  const collapseMap = getCollapseMap();
+  const groups = buildSubjectGroups(prints);
 
-  for (const subj of SUBJECT_ORDER) {
-    const arr = bySubj.get(subj);
-    if (!arr || arr.length === 0) continue;
+  for (const [subj, arr] of groups) {
+    const collapsed = !!collapseMap[subj];
 
     const header = document.createElement("div");
-    header.className = "item";
-    header.style.background = "rgba(255,255,255,0.03)";
-    header.style.borderStyle = "dashed";
-    header.innerHTML = `<div class="itemTitle">${escapeHtml(subj)}</div><div class="muted small">プリント ${arr.length} 件</div>`;
+    header.className = `item subjBox ${subjectClass(subj)}`;
+    header.innerHTML = `
+      <div class="subjHeader" data-subj-header="${escapeHtml(subj)}">
+        <div>
+          <div class="itemTitle">${escapeHtml(subj)}</div>
+          <div class="muted small">プリント ${arr.length} 件</div>
+        </div>
+        <div class="row">
+          <div class="subjBadge">${collapsed ? "＋ 展開" : "－ 折りたたみ"}</div>
+        </div>
+      </div>
+    `;
+    header.querySelector("[data-subj-header]")?.addEventListener("click", () => {
+      setCollapsed(subj, !collapsed);
+      renderHome();
+    });
     list.appendChild(header);
 
-    for (const p of arr) {
-      list.appendChild(renderOnePrintItem(p));
+    if (!collapsed) {
+      for (const p of arr) list.appendChild(renderOnePrintItem(p));
     }
   }
 
-  // 「その他:○○」などがある場合は最後にまとめて表示
-  const others = prints.filter(p => {
-    const s = normSubject(p.subject);
-    return s.startsWith("その他:");
-  });
-  if (others.length > 0) {
-    const header = document.createElement("div");
-    header.className = "item";
-    header.style.background = "rgba(255,255,255,0.03)";
-    header.style.borderStyle = "dashed";
-    header.innerHTML = `<div class="itemTitle">その他（自由記載）</div><div class="muted small">プリント ${others.length} 件</div>`;
-    list.appendChild(header);
-    for (const p of others) list.appendChild(renderOnePrintItem(p));
-  }
+  flushPendingHomeToast();
 }
 
 /* =========================
@@ -479,33 +595,25 @@ function renderAdd() {
   show("#view-add");
   $("#addStatus") && ($("#addStatus").textContent = "");
   $("#addTitle") && ($("#addTitle").value = `プリント ${new Date().toLocaleDateString()}`);
-  $("#addSubject") && ($("#addSubject").value = "算数");
-  $("#addFile") && ($("#addFile").value = "");
 
-  $("#addSubjectOtherWrap")?.classList.add("hidden");
+  state._addSubject = { subject:"算数", subjectOther:"" };
+  $("#addSubjectLabel") && ($("#addSubjectLabel").textContent = "算数");
+  $("#addSubjectOther")?.classList.add("hidden");
   $("#addSubjectOther") && ($("#addSubjectOther").value = "");
+  $("#addFile") && ($("#addFile").value = "");
 }
-
-function updateAddOtherUI(){
-  const v = ($("#addSubject")?.value || "").trim();
-  const wrap = $("#addSubjectOtherWrap");
-  if (!wrap) return;
-  if (v === "その他") wrap.classList.remove("hidden");
-  else wrap.classList.add("hidden");
-}
-$("#addSubject")?.addEventListener("change", updateAddOtherUI);
 
 $("#btnCreatePrint")?.addEventListener("click", async () => {
   const title = ($("#addTitle")?.value || "").trim() || `プリント ${new Date().toLocaleDateString()}`;
-  let subject = ($("#addSubject")?.value || "その他").trim();
-  if (subject === "その他") {
-    const other = ($("#addSubjectOther")?.value || "").trim();
-    if (other) subject = `その他:${other}`;
-  }
-  subject = normSubject(subject);
+  const subj = state._addSubject || { subject:"算数", subjectOther:"" };
 
   const file = $("#addFile")?.files && $("#addFile").files[0];
   if (!file) { $("#addStatus") && ($("#addStatus").textContent = "画像ファイルを選んでください。"); return; }
+
+  if (subj.subject === "その他") {
+    const other = ($("#addSubjectOther")?.value || "").trim();
+    subj.subjectOther = other;
+  }
 
   $("#addStatus") && ($("#addStatus").textContent = "取り込み中（変換/圧縮）...");
   try {
@@ -515,7 +623,7 @@ $("#btnCreatePrint")?.addEventListener("click", async () => {
     const printId = uid();
     const pageId = uid();
     const t = now();
-    const print = { id: printId, title, subject, createdAt: t };
+    const print = { id: printId, title, subject: subj.subject, subjectOther: subj.subjectOther || "", createdAt: t };
     const page = { id: pageId, printId, pageIndex: 0, image: blob, width, height };
 
     const groupId = uid();
@@ -537,8 +645,313 @@ $("#btnCreatePrint")?.addEventListener("click", async () => {
     await nav("edit");
 
   } catch (err) {
-    console.error(err);
+    showFatal(err);
     $("#addStatus") && ($("#addStatus").textContent = `失敗：${err.message || err}`);
+  }
+});
+
+/* =========================
+   Subject picker modal (Add/Edit)
+   ========================= */
+const subjectModal = $("#subjectModal");
+let subjectModalContext = null; // { type: "add" | "edit", printId? }
+
+function openSubjectModal(ctx){
+  subjectModalContext = ctx;
+  $("#subjectModalTitle") && ($("#subjectModalTitle").textContent =
+    ctx.type === "add" ? "教科を選択（プリント追加）" : "教科を選択（編集）"
+  );
+  renderSubjectOptions();
+  subjectModal?.classList.remove("hidden");
+  subjectModal?.setAttribute("aria-hidden","false");
+}
+function closeSubjectModal(){
+  subjectModal?.classList.add("hidden");
+  subjectModal?.setAttribute("aria-hidden","true");
+  subjectModalContext = null;
+}
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-modal-close]");
+  if (!c) return;
+  const which = c.getAttribute("data-modal-close");
+  if (which === "subject") closeSubjectModal();
+  if (which === "move") closeMoveModal();
+  if (which === "today") closeTodayModal();
+  if (which === "picker") closePickerModal();
+});
+
+function renderSubjectOptions(){
+  const wrap = $("#subjectOptions");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  SUBJECT_PRESETS.forEach((name) => {
+    const b = document.createElement("button");
+    b.className = "btn";
+    b.textContent = name;
+    b.addEventListener("click", async () => {
+      if (!subjectModalContext) return;
+
+      if (subjectModalContext.type === "add") {
+        state._addSubject = { subject: name, subjectOther: "" };
+        $("#addSubjectLabel") && ($("#addSubjectLabel").textContent = name);
+        if (name === "その他") {
+          $("#addSubjectOther")?.classList.remove("hidden");
+          $("#addSubjectOther")?.focus();
+        } else {
+          $("#addSubjectOther")?.classList.add("hidden");
+          $("#addSubjectOther") && ($("#addSubjectOther").value = "");
+        }
+        closeSubjectModal();
+        return;
+      }
+
+      if (subjectModalContext.type === "edit") {
+        await refreshCache();
+        const p = cache.prints.find(x => x.id === state.currentPrintId);
+        if (!p) return;
+        p.subject = name;
+        if (name !== "その他") p.subjectOther = "";
+        await put("prints", p);
+        await refreshCache();
+        updateEditHeaderClickable();
+        // show/hide inline other editor
+        closeSubjectModal();
+        if (name === "その他") openEditOtherPromptInline();
+        return;
+      }
+    });
+    wrap.appendChild(b);
+  });
+}
+
+$("#btnAddSubjectPick")?.addEventListener("click", () => openSubjectModal({ type:"add" }));
+
+/* =========================
+   Move selected prints (modal)
+   ========================= */
+const moveModal = $("#moveModal");
+function openMoveModal(){
+  renderMoveOptions();
+  $("#moveOtherWrap")?.classList.add("hidden");
+  $("#moveOtherInput") && ($("#moveOtherInput").value = "");
+  moveModal?.classList.remove("hidden");
+  moveModal?.setAttribute("aria-hidden","false");
+}
+function closeMoveModal(){
+  moveModal?.classList.add("hidden");
+  moveModal?.setAttribute("aria-hidden","true");
+}
+
+function allSubjectsInData(){
+  const set = new Set();
+  cache.prints.forEach(p => set.add(displaySubject(p)));
+  SUBJECT_ORDER.forEach(s => set.add(s));
+  return Array.from(set).filter(Boolean).sort((a,b)=>{
+    // keep presets first
+    const ai = SUBJECT_ORDER.indexOf(a);
+    const bi = SUBJECT_ORDER.indexOf(b);
+    if (ai >=0 && bi>=0) return ai-bi;
+    if (ai>=0) return -1;
+    if (bi>=0) return 1;
+    return a.localeCompare(b,"ja");
+  });
+}
+
+function renderMoveOptions(){
+  const wrap = $("#moveOptions");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const list = allSubjectsInData();
+
+  // buttons for existing + presets
+  list.forEach((name) => {
+    const b = document.createElement("button");
+    b.className = "btn";
+    b.textContent = name;
+    b.addEventListener("click", async () => {
+      if (name === "その他") {
+        // ask free text
+        $("#moveOtherWrap")?.classList.remove("hidden");
+        $("#moveOtherInput")?.focus();
+        return;
+      }
+      await applyMoveSelectedToSubject(name, "");
+      closeMoveModal();
+      await renderHome();
+      showHomeToast("移動しました");
+    });
+    wrap.appendChild(b);
+  });
+
+  // explicit "自由記載" shortcut
+  const free = document.createElement("button");
+  free.className = "btn";
+  free.textContent = "自由記載…";
+  free.addEventListener("click", () => {
+    $("#moveOtherWrap")?.classList.remove("hidden");
+    $("#moveOtherInput")?.focus();
+  });
+  wrap.appendChild(free);
+}
+
+async function applyMoveSelectedToSubject(subjectLabel, otherText){
+  await refreshCache();
+  const ids = Array.from(state.selectedPrintIds);
+  if (ids.length === 0) return;
+
+  const isPreset = SUBJECT_ORDER.includes(subjectLabel) && subjectLabel !== "その他";
+  const updated = [];
+
+  for (const id of ids) {
+    const p = cache.prints.find(x => x.id === id);
+    if (!p) continue;
+
+    if (isPreset) {
+      p.subject = subjectLabel;
+      p.subjectOther = "";
+    } else {
+      // custom => store as その他 + subjectOther
+      p.subject = "その他";
+      p.subjectOther = (subjectLabel === "その他" ? otherText : subjectLabel).trim();
+    }
+    updated.push(p);
+  }
+
+  await tx(["prints"], "readwrite", (st) => {
+    updated.forEach(p => st.prints.put(p));
+  });
+
+  await refreshCache();
+}
+
+$("#btnMoveSelected")?.addEventListener("click", async () => {
+  await refreshCache();
+  if (state.selectedPrintIds.size === 0) return;
+  openMoveModal();
+});
+$("#btnMoveOtherApply")?.addEventListener("click", async () => {
+  const other = ($("#moveOtherInput")?.value || "").trim();
+  if (!other) { alert("教科名を入力してください"); return; }
+  await applyMoveSelectedToSubject("その他", other);
+  closeMoveModal();
+  await renderHome();
+  showHomeToast("移動しました");
+});
+
+/* =========================
+   Bulk A4 PDF print (selected)
+   - iPad popup block avoid: iframe + print
+   ========================= */
+async function buildMaskedImageDataUrl(printId){
+  await refreshCache();
+  const page = cache.pages.find(x => x.printId === printId && x.pageIndex === 0);
+  if (!page) throw new Error("ページが見つかりません");
+  const bitmap = await createImageBitmap(page.image);
+
+  const off = document.createElement("canvas");
+  off.width = page.width;
+  off.height = page.height;
+  const octx = off.getContext("2d");
+  octx.drawImage(bitmap, 0, 0);
+
+  const masks = cache.masks.filter(m => m.printId === printId);
+  masks.forEach(m => {
+    octx.fillStyle = "black";
+    octx.fillRect(m.x * page.width, m.y * page.height, m.w * page.width, m.h * page.height);
+  });
+
+  return off.toDataURL("image/jpeg", 0.95);
+}
+
+function printHtmlViaIframe(html){
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.error(e);
+      alert("印刷を開始できませんでした。Safariの設定をご確認ください。");
+    }
+    setTimeout(() => iframe.remove(), 1500);
+  };
+}
+
+async function printSelectedAsA4(){
+  await refreshCache();
+  const ids = Array.from(state.selectedPrintIds);
+  if (ids.length === 0) return;
+
+  // build pages
+  const imgs = [];
+  for (const id of ids) {
+    const p = cache.prints.find(x => x.id === id);
+    const title = p?.title || "プリント";
+    const dataUrl = await buildMaskedImageDataUrl(id);
+    imgs.push({ title, dataUrl });
+  }
+
+  const pagesHtml = imgs.map((x) => `
+    <section class="page">
+      <div class="cap">${escapeHtml(x.title)}</div>
+      <img src="${x.dataUrl}" />
+    </section>
+  `).join("");
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Print</title>
+        <style>
+          @page { size: A4 portrait; margin: 8mm; }
+          body{ margin:0; font-family: system-ui, -apple-system, sans-serif; }
+          .page{
+            width: 210mm; height: 297mm;
+            padding: 8mm;
+            box-sizing:border-box;
+            page-break-after: always;
+            display:flex;
+            flex-direction:column;
+            gap: 6mm;
+          }
+          .cap{ font-size: 12px; color:#333; }
+          img{ flex:1; max-width:100%; max-height:100%; object-fit: contain; border: 0; }
+        </style>
+      </head>
+      <body>
+        ${pagesHtml}
+        <script>
+          window.onload = function(){
+            setTimeout(function(){ window.print(); }, 50);
+          }
+        <\/script>
+      </body>
+    </html>
+  `;
+  printHtmlViaIframe(html);
+}
+
+$("#btnPrintSelected")?.addEventListener("click", async () => {
+  try {
+    if (state.selectedPrintIds.size === 0) return;
+    await printSelectedAsA4();
+  } catch (e) {
+    showFatal(e);
+    alert("印刷に失敗しました。");
   }
 });
 
@@ -565,7 +978,6 @@ let drag = {
   worldStart: null,
 };
 
-// タップでタイトル/教科変更（簡易：prompt。将来モーダル化OK）
 async function renameCurrentPrint() {
   await refreshCache();
   const p = cache.prints.find(x => x.id === state.currentPrintId);
@@ -577,27 +989,26 @@ async function renameCurrentPrint() {
   await refreshCache();
   updateEditHeaderClickable();
 }
+
+function openEditOtherPromptInline(){
+  // gentle inline prompt (only when "その他" selected in edit)
+  const other = prompt("教科を自由記載（例：漢字 / 英検 / 地理）", "");
+  if (other === null) return;
+  (async ()=>{
+    await refreshCache();
+    const p = cache.prints.find(x => x.id === state.currentPrintId);
+    if (!p) return;
+    p.subject = "その他";
+    p.subjectOther = other.trim();
+    await put("prints", p);
+    await refreshCache();
+    updateEditHeaderClickable();
+  })();
+}
+
 async function changeCurrentSubject() {
-  await refreshCache();
-  const p = cache.prints.find(x => x.id === state.currentPrintId);
-  if (!p) return;
-
-  const base = isOtherSubject(p.subject) ? "その他" : normSubject(p.subject);
-  let v = prompt("教科を変更（算数/国語/英語/理科/社会/その他）", base || "その他");
-  if (v === null) return;
-  v = v.trim();
-  if (!SUBJECT_ORDER.includes(v)) v = "その他";
-
-  let subj = v;
-  if (v === "その他") {
-    const other = prompt("その他（自由記載）", (p.subject || "").startsWith("その他:") ? (p.subject.split("その他:")[1] || "") : "");
-    if (other && other.trim()) subj = `その他:${other.trim()}`;
-    else subj = "その他";
-  }
-  p.subject = normSubject(subj);
-  await put("prints", p);
-  await refreshCache();
-  updateEditHeaderClickable();
+  // bottom sheet
+  openSubjectModal({ type:"edit" });
 }
 
 function updateEditHeaderClickable() {
@@ -608,15 +1019,21 @@ function updateEditHeaderClickable() {
     titleEl.textContent = p ? `編集：${p.title}` : "編集";
     titleEl.style.cursor = "pointer";
     titleEl.title = "タップで名前変更";
+    titleEl.onclick = () => renameCurrentPrint();
   }
   if (metaEl) {
-    metaEl.textContent = p ? `${normSubject(p.subject)} / ${new Date(p.createdAt).toLocaleDateString()}` : "";
+    metaEl.textContent = p ? `${displaySubject(p)} / ${new Date(p.createdAt).toLocaleDateString()}` : "";
     metaEl.style.cursor = "pointer";
     metaEl.title = "タップで教科変更";
+    metaEl.onclick = () => changeCurrentSubject();
   }
-  if (titleEl) titleEl.onclick = () => renameCurrentPrint();
-  if (metaEl) metaEl.onclick = () => changeCurrentSubject();
 }
+
+$("#btnEditDone")?.addEventListener("click", async () => {
+  // set toast for home
+  sessionStorage.setItem("homeToast", "編集完了しました");
+  await nav("home");
+});
 
 $("#btnFit")?.addEventListener("click", () => { fitToStage("#stage", canvas, editPage); drawEdit(); });
 $("#btnZoomIn")?.addEventListener("click", () => { state.zoom = Math.min(5, state.zoom * 1.25); drawEdit(); });
@@ -841,7 +1258,6 @@ function fitToStage(stageSel, cvs, page) {
   state.panX = (sw - page.width * state.zoom) / 2;
   state.panY = (sh - page.height * state.zoom) / 2;
 }
-
 function screenToWorld(x, y) { return { x: (x - state.panX) / state.zoom, y: (y - state.panY) / state.zoom }; }
 
 function hitTestMaskEdit(sx, sy) {
@@ -938,7 +1354,7 @@ function drawEdit() {
   }
 }
 
-/* ----- Edit pointer handling ----- */
+/* Edit pointer handling */
 function getCanvasPoint(cvs, e) {
   const rect = cvs.getBoundingClientRect();
   return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -1097,107 +1513,110 @@ canvas?.addEventListener("pointerup", async (e) => {
 });
 
 /* =========================
-   PDF Export (A4 fit) - iPad popup safe
+   Single print from edit (A4) via iframe
    ========================= */
-$("#btnExportPdf")?.addEventListener("click", () => {
-  // iOS Safari対策：クリック直後にタブ確保
-  const win = window.open("", "_blank");
-  if (!win) {
-    alert("ポップアップがブロックされました。\nSafari設定でポップアップを許可するか、通常のSafariタブで開いてください。");
-    return;
-  }
-
-  (async () => {
+$("#btnExportPdf")?.addEventListener("click", async () => {
+  try {
     await ensureEditLoaded();
-    if (!editPage || !editImgBitmap) return;
-
-    const off = document.createElement("canvas");
-    off.width = editPage.width;
-    off.height = editPage.height;
-    const octx = off.getContext("2d");
-    octx.drawImage(editImgBitmap, 0, 0);
-
-    await refreshCache();
-    const masks = cache.masks.filter(m => m.printId === state.currentPrintId);
-    masks.forEach(m => {
-      octx.fillStyle = "black";
-      octx.fillRect(
-        m.x * editPage.width,
-        m.y * editPage.height,
-        m.w * editPage.width,
-        m.h * editPage.height
-      );
-    });
-
-    const dataUrl = off.toDataURL("image/jpeg", 0.95);
-
-    win.document.open();
-    win.document.write(`
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width,initial-scale=1" />
-          <title>Print</title>
-          <style>
-            @page { size: A4 portrait; margin: 8mm; }
-            html, body { margin: 0; padding: 0; }
-            .bar{
-              position: sticky; top: 0;
-              padding: 12px;
-              background: #111319;
-              color: #e9eef6;
-              border-bottom: 1px solid #242a36;
-              display:flex; gap:10px; align-items:center; justify-content:space-between;
-              font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-            }
-            button{
-              padding:10px 12px; border-radius:10px;
-              border:1px solid #242a36; background:#3f7cff; color:#fff;
-              font-size:14px;
-            }
-            .sheet{
-              width: 210mm; min-height: 297mm;
-              margin: 0 auto;
-              display: flex; align-items: center; justify-content: center;
-              padding: 8mm;
-              box-sizing: border-box;
-            }
-            img { max-width: 100%; max-height: 100%; object-fit: contain; }
-          </style>
-        </head>
-        <body>
-          <div class="bar">
-            <div>PDF/印刷（A4）</div>
-            <button onclick="window.print()">印刷</button>
-          </div>
-          <div class="sheet"><img src="${dataUrl}"></div>
-        </body>
-      </html>
-    `);
-    win.document.close();
-  })().catch(err => {
-    console.error(err);
-    try { win.close(); } catch {}
-    alert("PDF出力でエラーが出ました。");
-  });
-});
-
-/* 編集完了 */
-$("#btnEditDone")?.addEventListener("click", async () => {
-  showToast("編集完了しました", "ホームに戻ります", 1800);
-  await nav("home");
+    const dataUrl = await buildMaskedImageDataUrl(state.currentPrintId);
+    const p = cache.prints.find(x => x.id === state.currentPrintId);
+    const title = p?.title || "プリント";
+    const html = `
+      <html><head><meta charset="utf-8"/>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          @page { size: A4 portrait; margin: 8mm; }
+          body{ margin:0; font-family: system-ui, -apple-system, sans-serif; }
+          .page{ width:210mm; height:297mm; padding:8mm; box-sizing:border-box; display:flex; flex-direction:column; gap:6mm; }
+          .cap{ font-size:12px; color:#333; }
+          img{ flex:1; max-width:100%; max-height:100%; object-fit:contain; }
+        </style>
+      </head>
+      <body>
+        <section class="page">
+          <div class="cap">${escapeHtml(title)}</div>
+          <img src="${dataUrl}"/>
+        </section>
+        <script>window.onload=function(){setTimeout(function(){window.print();},50)}<\/script>
+      </body></html>
+    `;
+    printHtmlViaIframe(html);
+  } catch (e) {
+    showFatal(e);
+    alert("印刷に失敗しました。");
+  }
 });
 
 /* =========================
-   TODAY/REVIEW
+   TODAY/REVIEW + Filter
    ========================= */
+const todayModal = $("#todayModal");
+function openTodayModal(){
+  renderTodayOptions();
+  todayModal?.classList.remove("hidden");
+  todayModal?.setAttribute("aria-hidden","false");
+}
+function closeTodayModal(){
+  todayModal?.classList.add("hidden");
+  todayModal?.setAttribute("aria-hidden","true");
+}
+$("#btnTodayFilter")?.addEventListener("click", async () => {
+  await refreshCache();
+  openTodayModal();
+});
+
+function renderTodayOptions(){
+  const wrap = $("#todayOptions");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const set = new Set();
+  cache.prints.forEach(p => set.add(displaySubject(p)));
+  SUBJECT_ORDER.forEach(s => set.add(s));
+  const list = Array.from(set).filter(Boolean).sort((a,b)=>{
+    const ai = SUBJECT_ORDER.indexOf(a);
+    const bi = SUBJECT_ORDER.indexOf(b);
+    if (ai>=0 && bi>=0) return ai-bi;
+    if (ai>=0) return -1;
+    if (bi>=0) return 1;
+    return a.localeCompare(b,"ja");
+  });
+
+  const cur = state.todaySubjectFilter;
+
+  list.forEach((name) => {
+    const b = document.createElement("button");
+    b.className = "btn";
+    const on = cur ? cur.has(name) : false;
+    b.textContent = on ? `✓ ${name}` : name;
+    b.addEventListener("click", () => {
+      if (!state.todaySubjectFilter) state.todaySubjectFilter = new Set();
+      const s = state.todaySubjectFilter;
+      if (s.has(name)) s.delete(name);
+      else s.add(name);
+      renderTodayOptions();
+    });
+    wrap.appendChild(b);
+  });
+}
+$("#btnTodayAll")?.addEventListener("click", () => {
+  state.todaySubjectFilter = null;
+  renderTodayOptions();
+});
+$("#btnTodayClear")?.addEventListener("click", () => {
+  state.todaySubjectFilter = new Set();
+  renderTodayOptions();
+});
+$("#btnTodayApply")?.addEventListener("click", async () => {
+  closeTodayModal();
+  await renderToday();
+});
+
 const reviewCanvas = $("#reviewCanvas");
 const reviewCtx = reviewCanvas?.getContext("2d");
 let reviewTarget = null;
 
-$("#btnBackToToday")?.addEventListener("click", () => {
-  $("#view-review")?.classList.add("hidden");
-});
+$("#btnBackToToday")?.addEventListener("click", () => $("#view-review")?.classList.add("hidden"));
 $("#btnOpenEditFromReview")?.addEventListener("click", () => {
   if (!reviewTarget) return;
   state.currentPrintId = reviewTarget.g.printId;
@@ -1207,7 +1626,6 @@ $("#btnOpenEditFromReview")?.addEventListener("click", () => {
 });
 $("#btnSkipToday")?.addEventListener("click", async () => {
   if (!reviewTarget) return;
-  if (state.practiceActive) return; // 学習モードではスキップ不要
   await skipToday(reviewTarget.g.id);
   await renderToday();
 });
@@ -1223,31 +1641,35 @@ function showDoneScreen() {
   $("#view-review")?.classList.add("hidden");
   $("#view-done")?.classList.remove("hidden");
   $("#doneCount") && ($("#doneCount").textContent = String(state.doneTodayCount || 0));
+}
 
-  if (state.practiceActive) {
-    $("#doneTitle") && ($("#doneTitle").textContent = "学習終了！");
-    $("#doneMsg") && ($("#doneMsg").textContent = "選択したQの学習が終わりました。");
-    $("#doneNote") && ($("#doneNote").textContent = "※評価はSRSに反映されています。次回の期限に応じて「今日の復習」に出ます。");
-  } else {
-    $("#doneTitle") && ($("#doneTitle").textContent = "本日の分は終了！");
-    $("#doneMsg") && ($("#doneMsg").textContent = "おつかれさまでした。よく頑張りました。");
-    $("#doneNote") && ($("#doneNote").textContent = "※明日以降、期限が来たらまた「今日の復習」に出ます。");
-  }
+function dueFilteredBySubjects(due){
+  const filter = state.todaySubjectFilter;
+  if (!filter || filter.size === 0) return due;
+  return due.filter(({ g }) => {
+    const p = cache.prints.find(x => x.id === g.printId);
+    const s = displaySubject(p);
+    return filter.has(s);
+  });
 }
 
 async function renderToday() {
   await refreshCache();
   show("#view-today");
 
-  $("#todayTitle") && ($("#todayTitle").textContent = "今日の復習");
-  $("#todayListCard")?.classList.remove("hidden");
-
   $("#view-done")?.classList.add("hidden");
   $("#view-review")?.classList.add("hidden");
 
-  const due = computeDueGroups();
-  $("#todayMeta") && ($("#todayMeta").textContent = `期限が来ているQ：${due.length}（スキップ除外）`);
+  let due = computeDueGroups();
+  due = dueFilteredBySubjects(due);
 
+  const filterInfo = state.todaySubjectFilter && state.todaySubjectFilter.size > 0
+    ? ` / 教科：${Array.from(state.todaySubjectFilter).join("・")}`
+    : "";
+  $("#todayMeta") && ($("#todayMeta").textContent = `期限が来ているQ：${due.length}（スキップ除外）${filterInfo}`);
+
+  state.practiceActive = false;
+  state.practicePrintId = null;
   state.reviewQueue = due.map(x => x.g.id);
   state.reviewIndex = -1;
   state.doneTodayCount = 0;
@@ -1256,7 +1678,7 @@ async function renderToday() {
   if (!list) return;
   list.innerHTML = "";
   if (due.length === 0) {
-    list.innerHTML = `<div class="item muted">今日は復習なし</div>`;
+    list.innerHTML = `<div class="item muted">今日は復習なし（※期限Qがありません / またはフィルタで0件）</div>`;
     return;
   }
 
@@ -1268,7 +1690,7 @@ async function renderToday() {
       <div class="row space">
         <div>
           <div class="itemTitle">${escapeHtml(p?.title || "プリント")} / ${escapeHtml(g.label || "(ラベルなし)")}</div>
-          <div class="muted small">期限：${toDateStr(s.nextDueAt)} / 難易度:${s.difficulty.toFixed(1)} / 安定度:${s.stability.toFixed(1)}日 / 復習回数:${s.reviewCount}</div>
+          <div class="muted small">教科：${escapeHtml(displaySubject(p))} / 期限：${toDateStr(s.nextDueAt)} / 難易度:${s.difficulty.toFixed(1)} / 安定度:${s.stability.toFixed(1)}日 / 復習回数:${s.reviewCount}</div>
         </div>
         <div class="row">
           <button class="btn" data-skip="${g.id}">スキップ</button>
@@ -1292,26 +1714,6 @@ async function renderToday() {
   }
 }
 
-async function renderPractice() {
-  await refreshCache();
-  show("#view-today");
-  $("#todayTitle") && ($("#todayTitle").textContent = "学習（任意のQ）");
-  $("#todayMeta") && ($("#todayMeta").textContent = "期限に関係なく、選択したQを学習中");
-  $("#todayListCard")?.classList.add("hidden");
-  $("#view-done")?.classList.add("hidden");
-  $("#view-review")?.classList.remove("hidden");
-
-  // 学習モードでは一覧に戻る必要が薄いので文言だけ
-  $("#btnBackToToday") && ($("#btnBackToToday").textContent = "戻る");
-  $("#btnSkipToday") && ($("#btnSkipToday").disabled = true);
-
-  // すでにキューがある前提
-  if (state.reviewQueue.length > 0) {
-    state.reviewIndex = 0;
-    await openReview(state.reviewQueue[0]);
-  }
-}
-
 async function openReview(groupId) {
   await refreshCache();
   const g = cache.groups.find((x) => x.id === groupId);
@@ -1324,7 +1726,6 @@ async function openReview(groupId) {
   reviewTarget = { g, p, page, bitmap };
   state.revealedMaskIds.clear();
 
-  // queue内の位置を同期
   const idx = state.reviewQueue.indexOf(groupId);
   state.reviewIndex = idx >= 0 ? idx : 0;
 
@@ -1332,17 +1733,7 @@ async function openReview(groupId) {
   $("#reviewTitle") && ($("#reviewTitle").textContent = `${p?.title || "プリント"} / ${g.label || "(ラベルなし)"}`);
 
   const s = cache.srs.find((x) => x.groupId === g.id) || initSrsState(g.id);
-  $("#reviewMeta") && ($("#reviewMeta").textContent = `次回期限：${toDateStr(s.nextDueAt)} / 難易度:${s.difficulty.toFixed(1)} / 安定度:${s.stability.toFixed(1)}日`);
-
-  // 学習モード：スキップボタン無効
-  if (state.practiceActive) {
-    $("#btnSkipToday")?.classList.add("hidden");
-    $("#btnBackToToday") && ($("#btnBackToToday").textContent = "学習をやめる");
-  } else {
-    $("#btnSkipToday")?.classList.remove("hidden");
-    $("#btnSkipToday") && ($("#btnSkipToday").disabled = false);
-    $("#btnBackToToday") && ($("#btnBackToToday").textContent = "一覧へ戻る");
-  }
+  $("#reviewMeta") && ($("#reviewMeta").textContent = `教科：${displaySubject(p)} / 期限：${toDateStr(s.nextDueAt)} / 難易度:${s.difficulty.toFixed(1)} / 安定度:${s.stability.toFixed(1)}日`);
 
   updateReviewRemaining();
   drawReview();
@@ -1438,12 +1829,25 @@ reviewCanvas?.addEventListener("click", (e) => {
   drawReview();
 });
 
-/* =========================
-   評価 → 次へ / 終了
-   ========================= */
+/* Next/Prev buttons (within current queue) */
+$("#btnNextQ")?.addEventListener("click", async () => {
+  if (!state.reviewQueue || state.reviewQueue.length === 0) return;
+  const ni = Math.min(state.reviewIndex + 1, state.reviewQueue.length - 1);
+  state.reviewIndex = ni;
+  await openReview(state.reviewQueue[ni]);
+});
+$("#btnPrevQ")?.addEventListener("click", async () => {
+  if (!state.reviewQueue || state.reviewQueue.length === 0) return;
+  const pi = Math.max(state.reviewIndex - 1, 0);
+  state.reviewIndex = pi;
+  await openReview(state.reviewQueue[pi]);
+});
+
+/* 評価 → 次へ / 終了 */
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-review-rate]");
   if (!btn || !reviewTarget) return;
+
   const rating = btn.getAttribute("data-review-rate");
   if (!["again", "hard", "good", "easy"].includes(rating)) return;
 
@@ -1457,7 +1861,6 @@ document.addEventListener("click", async (e) => {
 
   const next = updateSrs(s, rating);
 
-  // due復習の場合はスキップ解除（学習でも解除してOK）
   await del("skips", g.id);
 
   await tx(["srs", "reviews", "groups"], "readwrite", (st) => {
@@ -1469,36 +1872,38 @@ document.addEventListener("click", async (e) => {
 
   state.doneTodayCount = (state.doneTodayCount || 0) + 1;
 
-  // 次へ
-  const idx = state.reviewQueue.indexOf(gid);
-  const nextIdx = idx >= 0 ? idx + 1 : state.reviewIndex + 1;
+  await refreshCache();
 
-  if (nextIdx >= state.reviewQueue.length) {
-    // 終了
+  if (state.practiceActive) {
+    const nextIndex = state.reviewIndex + 1;
+    if (nextIndex >= state.reviewQueue.length) {
+      showDoneScreen();
+      return;
+    }
+    state.reviewIndex = nextIndex;
+    await openReview(state.reviewQueue[state.reviewIndex]);
+    return;
+  }
+
+  // today mode: recompute due with filter
+  let dueNow = computeDueGroups();
+  dueNow = dueFilteredBySubjects(dueNow);
+  const dueIds = dueNow.map(x => x.g.id);
+
+  if (dueIds.length === 0) {
+    await renderToday();
     showDoneScreen();
     return;
   }
 
-  state.reviewIndex = nextIdx;
-  await openReview(state.reviewQueue[nextIdx]);
-});
-
-/* 次/前ボタン（手動移動） */
-$("#btnNextQ")?.addEventListener("click", async () => {
-  const i = Math.max(0, state.reviewIndex);
-  if (i + 1 >= state.reviewQueue.length) return;
-  state.reviewIndex = i + 1;
-  await openReview(state.reviewQueue[state.reviewIndex]);
-});
-$("#btnPrevQ")?.addEventListener("click", async () => {
-  const i = Math.max(0, state.reviewIndex);
-  if (i - 1 < 0) return;
-  state.reviewIndex = i - 1;
-  await openReview(state.reviewQueue[state.reviewIndex]);
+  state.reviewQueue = dueIds;
+  const nextIndex = Math.min(Math.max(state.reviewIndex, 0), dueIds.length - 1);
+  state.reviewIndex = nextIndex;
+  await openReview(dueIds[nextIndex]);
 });
 
 /* =========================
-   Practice Picker (黒塗り＋Qラベル画像で選択) + ピンチズーム
+   Practice Picker (choose Q(s) even if not due)
    ========================= */
 const pickerModal = $("#pickerModal");
 const pickerCanvas = $("#pickerCanvas");
@@ -1509,38 +1914,46 @@ const pickerState = {
   page: null,
   bitmap: null,
   selectedGroupIds: new Set(),
-  // display transform
   z: 1,
   px: 0,
   py: 0,
-  // min/max zoom
   minZ: 0.2,
   maxZ: 6,
 };
 
-function openModalPicker(){
-  if (!pickerModal) return;
-  pickerModal.classList.remove("hidden");
-  pickerModal.setAttribute("aria-hidden","false");
+function openPickerModal(){
+  pickerModal?.classList.remove("hidden");
+  pickerModal?.setAttribute("aria-hidden","false");
 }
-function closeModalPicker(){
-  if (!pickerModal) return;
-  pickerModal.classList.add("hidden");
-  pickerModal.setAttribute("aria-hidden","true");
+function closePickerModal(){
+  pickerModal?.classList.add("hidden");
+  pickerModal?.setAttribute("aria-hidden","true");
+}
+function hasPickerUI(){
+  return !!(pickerModal && pickerCanvas && $("#pickerStage") && $("#pickerStart") && $("#pickerGroupList"));
 }
 
-document.addEventListener("click", (e) => {
-  const c = e.target.closest("[data-modal-close]");
-  if (!c) return;
-  const which = c.getAttribute("data-modal-close");
-  if (which === "picker") closeModalPicker();
-});
+async function tryOpenPracticeOrFirstDue(printId){
+  await refreshCache();
+  let dueForPrint = computeDueGroups().filter(({ g }) => g.printId === printId);
+  dueForPrint = dueFilteredBySubjects(dueForPrint);
 
-async function openPracticePicker(printId, { reason="manual" } = {}) {
+  if (dueForPrint.length > 0) {
+    await nav("today");
+    setTimeout(() => openReview(dueForPrint[0].g.id), 0);
+    return;
+  }
+  const ok = await safeOpenPracticePicker(printId, { reason:"dueEmpty" });
+  if (!ok) alert("学習ピッカーUIが見つかりません（index.html反映を確認してください）");
+}
+
+async function safeOpenPracticePicker(printId, { reason="manual" } = {}) {
+  if (!hasPickerUI()) return false;
+
   await refreshCache();
   const p = cache.prints.find(x => x.id === printId);
   const page = cache.pages.find(x => x.printId === printId && x.pageIndex === 0);
-  if (!p || !page) return;
+  if (!p || !page) return false;
 
   const bitmap = await createImageBitmap(page.image);
 
@@ -1550,32 +1963,30 @@ async function openPracticePicker(printId, { reason="manual" } = {}) {
   pickerState.selectedGroupIds.clear();
 
   $("#pickerTitle") && ($("#pickerTitle").textContent = "学習するQを選択");
-  if (reason === "dueEmpty") {
-    $("#pickerSub") && ($("#pickerSub").textContent = "このプリントは今日の復習対象（期限Q）がありません。学習したいQを選んで開始できます（複数OK）。");
-  } else {
-    $("#pickerSub") && ($("#pickerSub").textContent = "プリント画像上でQ（黒塗り）をタップして選択できます（複数OK）");
-  }
+  $("#pickerSub") && ($("#pickerSub").textContent =
+    reason === "dueEmpty"
+      ? "このプリントは今日の復習対象（期限Q）がありません。学習したいQを選んで開始できます（複数OK）。"
+      : "プリント画像上でQ（黒塗り）をタップして選択できます（複数OK）。"
+  );
 
   await renderPickerGroupList();
-  openModalPicker();
+  openPickerModal();
   requestAnimationFrame(() => {
-    fitPickerToStage(true); // reset
+    fitPickerToStage(true);
     drawPicker();
   });
+  return true;
 }
 
 function fitPickerToStage(reset=false){
   const stage = $("#pickerStage");
-  if (!stage || !pickerState.page) return;
+  if (!stage || !pickerState.page || !pickerCanvas) return;
   const sw = stage.clientWidth;
   const sh = stage.clientHeight;
 
-  if (pickerCanvas) {
-    pickerCanvas.width = Math.max(1, Math.floor(sw));
-    pickerCanvas.height = Math.max(1, Math.floor(sh));
-  }
+  pickerCanvas.width = Math.max(1, Math.floor(sw));
+  pickerCanvas.height = Math.max(1, Math.floor(sh));
 
-  // fit zoom
   const zx = sw / pickerState.page.width;
   const zy = sh / pickerState.page.height;
   const fitZ = Math.min(zx, zy);
@@ -1588,7 +1999,6 @@ function fitPickerToStage(reset=false){
     pickerState.px = (sw - pickerState.page.width * pickerState.z) / 2;
     pickerState.py = (sh - pickerState.page.height * pickerState.z) / 2;
   } else {
-    // keep current z/px/py
     pickerState.z = clamp(pickerState.z, pickerState.minZ, pickerState.maxZ);
   }
 }
@@ -1621,16 +2031,16 @@ async function renderPickerGroupList(){
         <button class="btn" data-pick-only="${g.id}">このQだけ</button>
       </div>
     `;
-    row.querySelector(`[data-pick-check="${g.id}"]`)?.addEventListener("change", (ev) => {
+    row.querySelector(`[data-pick-check="${g.id}"]`)?.addEventListener("change", async (ev) => {
       if (ev.target.checked) pickerState.selectedGroupIds.add(g.id);
       else pickerState.selectedGroupIds.delete(g.id);
       updatePickerSelUI();
       drawPicker();
     });
-    row.querySelector(`[data-pick-only="${g.id}"]`)?.addEventListener("click", () => {
+    row.querySelector(`[data-pick-only="${g.id}"]`)?.addEventListener("click", async () => {
       pickerState.selectedGroupIds.clear();
       pickerState.selectedGroupIds.add(g.id);
-      renderPickerGroupList();
+      await renderPickerGroupList();
       updatePickerSelUI();
       drawPicker();
     });
@@ -1651,7 +2061,6 @@ function drawPicker(){
   const stage = $("#pickerStage");
   if (!stage) return;
 
-  // resize if needed
   const sw = stage.clientWidth;
   const sh = stage.clientHeight;
   if (pickerCanvas.width !== Math.floor(sw) || pickerCanvas.height !== Math.floor(sh)) {
@@ -1675,7 +2084,6 @@ function drawPicker(){
 
   pickerCtx.drawImage(pickerState.bitmap, 0, 0);
 
-  // 黒塗り＋ラベル
   masks.forEach(m => {
     const rx = m.x * page.width;
     const ry = m.y * page.height;
@@ -1710,35 +2118,18 @@ function pickerScreenToNorm(x, y){
 }
 
 function pickerZoomAt(screenX, screenY, newZ){
-  const stage = $("#pickerStage");
-  if (!stage || !pickerState.page) return;
-
   newZ = clamp(newZ, pickerState.minZ, pickerState.maxZ);
-
-  // keep the world point under cursor stable:
-  // screen = pan + world*z  => world = (screen - pan)/z
   const worldX = (screenX - pickerState.px) / pickerState.z;
   const worldY = (screenY - pickerState.py) / pickerState.z;
-
   pickerState.z = newZ;
   pickerState.px = screenX - worldX * pickerState.z;
   pickerState.py = screenY - worldY * pickerState.z;
-
   drawPicker();
 }
 
-/* ---- pointer events for pinch/pan ---- */
+/* pinch/pan */
 const pickerPointers = new Map();
-let pickerGesture = {
-  mode: "none", // "pan" | "pinch"
-  startPx: 0,
-  startPy: 0,
-  startZ: 1,
-  startDist: 0,
-  startCenter: { x: 0, y: 0 },
-  lastTapTime: 0,
-  moved: false,
-};
+let pickerGesture = { mode:"none", startPx:0, startPy:0, startZ:1, startDist:0, startCenter:{x:0,y:0}, moved:false };
 
 function getPickerPoint(e){
   const rect = pickerCanvas.getBoundingClientRect();
@@ -1748,20 +2139,17 @@ function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function center(a,b){ return { x: (a.x+b.x)/2, y: (a.y+b.y)/2 }; }
 
 pickerCanvas?.addEventListener("pointerdown", (e) => {
-  if (!pickerCanvas) return;
   pickerCanvas.setPointerCapture(e.pointerId);
   const p = getPickerPoint(e);
   pickerPointers.set(e.pointerId, p);
   pickerGesture.moved = false;
 
   if (pickerPointers.size === 1) {
-    // start pan candidate (1 finger) but we won't pan unless moved enough (so click works)
     pickerGesture.mode = "pan";
     pickerGesture.startPx = pickerState.px;
     pickerGesture.startPy = pickerState.py;
     pickerGesture.startCenter = { ...p };
   } else if (pickerPointers.size === 2) {
-    // pinch
     const pts = Array.from(pickerPointers.values());
     pickerGesture.mode = "pinch";
     pickerGesture.startPx = pickerState.px;
@@ -1779,7 +2167,6 @@ pickerCanvas?.addEventListener("pointermove", (e) => {
   const p = getPickerPoint(e);
   pickerPointers.set(e.pointerId, p);
 
-  // move threshold
   const pts = Array.from(pickerPointers.values());
 
   if (pickerPointers.size === 1 && pickerGesture.mode === "pan") {
@@ -1802,11 +2189,8 @@ pickerCanvas?.addEventListener("pointermove", (e) => {
     const scale = d / Math.max(1e-6, pickerGesture.startDist);
     const newZ = pickerGesture.startZ * scale;
 
-    // zoom about center, but also allow pan with moving center
-    // keep world point under center stable using zoomAt
     pickerZoomAt(c.x, c.y, newZ);
 
-    // then apply pan offset difference from initial center movement
     const cdx = c.x - pickerGesture.startCenter.x;
     const cdy = c.y - pickerGesture.startCenter.y;
     pickerState.px += cdx;
@@ -1821,7 +2205,6 @@ pickerCanvas?.addEventListener("pointerup", async (e) => {
   if (!pickerPointers.has(e.pointerId)) return;
   pickerPointers.delete(e.pointerId);
 
-  // if 2->1 pointers, reset gesture base
   if (pickerPointers.size === 1) {
     const p = Array.from(pickerPointers.values())[0];
     pickerGesture.mode = "pan";
@@ -1834,7 +2217,6 @@ pickerCanvas?.addEventListener("pointerup", async (e) => {
     pickerGesture.mode = "none";
     pickerGesture.moved = false;
 
-    // 1本指で「動いてない」＝クリックとしてQ選択
     if (!wasMoved) {
       await refreshCache();
       if (!pickerState.page) return;
@@ -1844,11 +2226,7 @@ pickerCanvas?.addEventListener("pointerup", async (e) => {
       const y = e.clientY - rect.top;
 
       const { nx, ny } = pickerScreenToNorm(x, y);
-      const masks = cache.masks
-        .filter(m => m.printId === pickerState.printId)
-        .slice()
-        .reverse();
-
+      const masks = cache.masks.filter(m => m.printId === pickerState.printId).slice().reverse();
       const hit = masks.find(m => nx >= m.x && nx <= m.x + m.w && ny >= m.y && ny <= m.y + m.h);
       if (!hit) return;
 
@@ -1868,7 +2246,6 @@ pickerCanvas?.addEventListener("pointercancel", () => {
   pickerGesture.moved = false;
 });
 
-/* PC: wheel zoom (trackpad ok) */
 pickerCanvas?.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (!pickerState.page) return;
@@ -1893,6 +2270,17 @@ $("#pickerClear")?.addEventListener("click", async () => {
   await renderPickerGroupList();
   drawPicker();
 });
+$("#pickerFit")?.addEventListener("click", () => { fitPickerToStage(true); drawPicker(); });
+$("#pickerZoomIn")?.addEventListener("click", () => {
+  const stage = $("#pickerStage");
+  if (!stage) return;
+  pickerZoomAt(stage.clientWidth/2, stage.clientHeight/2, pickerState.z * 1.25);
+});
+$("#pickerZoomOut")?.addEventListener("click", () => {
+  const stage = $("#pickerStage");
+  if (!stage) return;
+  pickerZoomAt(stage.clientWidth/2, stage.clientHeight/2, pickerState.z / 1.25);
+});
 
 $("#pickerStart")?.addEventListener("click", async () => {
   if (!pickerState.printId) return;
@@ -1907,7 +2295,7 @@ $("#pickerStart")?.addEventListener("click", async () => {
   const order = new Map(cache.groups.map(g => [g.id, g.orderIndex]));
   sel.sort((a,b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
 
-  closeModalPicker();
+  closePickerModal();
 
   state.practiceActive = true;
   state.practicePrintId = pickerState.printId;
@@ -1916,11 +2304,35 @@ $("#pickerStart")?.addEventListener("click", async () => {
   state.doneTodayCount = 0;
 
   await nav("today");
+  await openReview(state.reviewQueue[0]);
 });
+
+/* =========================
+   Move Selected / Print Selected button safety check
+   ========================= */
+$("#btnPrintSelected")?.addEventListener("mouseenter", updateHomeSelectionUI);
+$("#btnMoveSelected")?.addEventListener("mouseenter", updateHomeSelectionUI);
+
+/* =========================
+   Move Selected open
+   ========================= */
+$("#btnMoveSelected")?.addEventListener("click", () => {
+  if (state.selectedPrintIds.size === 0) return;
+  openMoveModal();
+});
+
+/* =========================
+   Subject modal open from edit header (click)
+   ========================= */
+$("#editMeta")?.addEventListener("click", () => openSubjectModal({ type:"edit" }));
 
 /* =========================
    Boot
    ========================= */
 (async function boot() {
-  await nav("home");
+  try {
+    await nav("home");
+  } catch (e) {
+    showFatal(e);
+  }
 })();
