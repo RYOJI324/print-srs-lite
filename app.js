@@ -11,6 +11,10 @@
    - 今日対象外でも学習: HOMEの「このプリントを復習」-> Qピッカーで選択して開始
      - ピンチズーム/パン対応
    - レビュー4段階表示: もう一度/難しい/正解/簡単
+
+  2026-02-17 fix:
+   - 任意学習（HOME→Qピッカー→学習開始）でレビューが開かない問題を修正
+     （#view-review が #view-today の内部にあるため、親の #view-today を表示してから openReview する）
 */
 
 const CFG = {
@@ -579,9 +583,6 @@ function openSubjectSheet(ctx){
     }
   }
 
-  // 初期値が multi でカスタム含む場合：そのまま個別の項目として並べたいので subjects に含める
-  // subjectsは呼び出し側で用意している想定
-
   function render(){
     const isOtherSelected = selected.has("その他") && ctx.allowOtherFreeText;
     if (subjectOtherWrap) subjectOtherWrap.classList.toggle("hidden", !isOtherSelected);
@@ -1027,7 +1028,6 @@ async function renameCurrentPrint(){
   const p = cache.prints.find(x => x.id === state.currentPrintId);
   if (!p) return;
 
-  // promptは残しても良いが、将来完全タップUI化のため最小限にする
   const v = window.prompt("プリント名を変更", p.title || "");
   if (v === null) return;
   p.title = v.trim() || p.title;
@@ -1056,7 +1056,6 @@ async function changeCurrentSubjectSheet(){
       await put("prints", p);
       await refreshCache();
       updateEditHeaderClickable();
-      // HOME側の分類が変わるので折りたたみも反映（次回homeでOK）
     },
     onCancel: () => {}
   });
@@ -1446,7 +1445,6 @@ async function renderToday(){
 // today filter button
 $("#btnTodayFilter")?.addEventListener("click", async () => {
   await refreshCache();
-  const subjects = getAllSubjectsFromPrints().filter(s => s !== "その他"); // 「その他」も選べるが自由記載と衝突するので、実際には「その他」も残す
   const all = getAllSubjectsFromPrints();
 
   openSubjectSheet({
@@ -1904,6 +1902,7 @@ pickerCanvas?.addEventListener("click", (e) => {
 });
 
 // 学習開始（選択Qだけでreviewキューを作る）
+// ★FIX：#view-review は #view-today の内側にあるので、親を表示してから openReview
 $("#pickerStart")?.addEventListener("click", async () => {
   if (!state.picker.open) return;
   const gids = Array.from(state.picker.selectedGroupIds);
@@ -1916,8 +1915,14 @@ $("#pickerStart")?.addEventListener("click", async () => {
   state.reviewIndex = 0;
   state.doneTodayCount = 0;
 
-  // today filter はこの任意学習では影響させない
-  //（必要ならここで退避/復元できる）
+  // 親のビューを表示（これをしないと review が見えない）
+  state.route = "today";
+  show("#view-today");
+  $("#view-done")?.classList.add("hidden");
+  $("#view-review")?.classList.add("hidden");
+
+  // 任意：メタ表示
+  $("#todayMeta") && ($("#todayMeta").textContent = `任意学習：選択したQ ${gids.length} 問`);
 
   await openReview(gids[0]);
 });
